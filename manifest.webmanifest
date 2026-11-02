@@ -1,0 +1,14 @@
+{
+  "name": "RebecaPed — Ferramentas clínicas",
+  "short_name": "RebecaPed",
+  "description": "Calculadoras, plantões, protocolos e medicamentos para uso pessoal.",
+  "lang": "pt-BR",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f3f5ef",
+  "theme_color": "#294a3a",
+  "icons": [
+    {"src":"./icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}
+  ]
+}
