@@ -10,7 +10,22 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div class="app-shell">
+  <section class="auth-gate" id="authGate" aria-labelledby="authTitle" hidden>
+    <div class="auth-card">
+      <a class="brand auth-brand" href="#" aria-label="Meu Plantão"><span class="brand-mark">M</span><span>meu<span class="brand-light">plantão</span></span></a>
+      <p class="eyebrow">ACESSO PESSOAL</p>
+      <h1 id="authTitle">Entre no Meu Plantão</h1>
+      <p class="muted">Informe o e-mail da sua conta. Enviaremos um link para entrar com segurança.</p>
+      <form id="authForm" class="auth-form">
+        <label for="authEmail">E-mail</label>
+        <input id="authEmail" type="email" autocomplete="email" required placeholder="voce@exemplo.com">
+        <button class="button primary" id="authSubmit" type="submit">Enviar link de acesso</button>
+      </form>
+      <p class="auth-message" id="authMessage" role="status" aria-live="polite"></p>
+      <p class="form-hint">O acesso é destinado a contas já existentes no Supabase. Se não receber o e-mail, confira o spam e o endereço informado.</p>
+    </div>
+  </section>
+  <div class="app-shell" id="appShell" hidden>
     <aside class="sidebar" aria-label="Navegação principal">
       <a class="brand" href="#inicio" aria-label="Meu Plantão, início">
         <span class="brand-mark">M</span><span>meu<span class="brand-light">plantão</span></span>
@@ -32,7 +47,7 @@
     <main class="main-area">
       <header class="topbar">
         <div class="mobile-brand"><span class="brand-mark">M</span>meu<span class="brand-light">plantão</span></div>
-        <div class="topbar-right"><span class="today-label" id="todayLabel"></span><span class="avatar">MP</span></div>
+        <div class="topbar-right"><span class="today-label" id="todayLabel"></span><span class="avatar">MP</span><button class="button secondary small auth-logout" id="authSignOut" type="button" hidden>Sair</button></div>
       </header>
 
       <section class="page active" id="page-inicio">
@@ -135,3 +150,4 @@
   <script src="app.js"></script>
 </body>
 </html>
+
