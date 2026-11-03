@@ -15,14 +15,24 @@
       <a class="brand auth-brand" href="#" aria-label="Meu Plantão"><span class="brand-mark">M</span><span>meu<span class="brand-light">plantão</span></span></a>
       <p class="eyebrow">ACESSO PESSOAL</p>
       <h1 id="authTitle">Entre no Meu Plantão</h1>
-      <p class="muted">Informe o e-mail da sua conta. Enviaremos um link para entrar com segurança.</p>
+      <p class="muted">Entre com o e-mail e a senha associados à sua conta.</p>
       <form id="authForm" class="auth-form">
         <label for="authEmail">E-mail</label>
         <input id="authEmail" type="email" autocomplete="email" required placeholder="voce@exemplo.com">
-        <button class="button primary" id="authSubmit" type="submit">Enviar link de acesso</button>
+        <label for="authPassword">Senha</label>
+        <input id="authPassword" type="password" autocomplete="current-password" required placeholder="Sua senha">
+        <button class="button primary" id="authSubmit" type="submit">Entrar</button>
+        <button class="auth-text-button" id="authRecovery" type="button">Esqueci ou preciso definir minha senha</button>
+      </form>
+      <form id="authPasswordRecoveryForm" class="auth-form" hidden>
+        <label for="newPassword">Nova senha</label>
+        <input id="newPassword" type="password" autocomplete="new-password" minlength="8" required placeholder="Mínimo de 8 caracteres">
+        <label for="confirmPassword">Confirme a nova senha</label>
+        <input id="confirmPassword" type="password" autocomplete="new-password" minlength="8" required placeholder="Digite a senha novamente">
+        <button class="button primary" id="savePassword" type="submit">Salvar nova senha</button>
       </form>
       <p class="auth-message" id="authMessage" role="status" aria-live="polite"></p>
-      <p class="form-hint">O acesso é destinado a contas já existentes no Supabase. Se não receber o e-mail, confira o spam e o endereço informado.</p>
+      <p class="form-hint">O acesso é destinado a contas já existentes no Supabase. Se ainda não foi convidada, peça um convite à administradora do projeto.</p>
     </div>
   </section>
   <div class="app-shell" id="appShell" hidden>
