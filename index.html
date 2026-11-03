@@ -2,174 +2,136 @@
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#294a3a">
-  <meta name="description" content="Calculadoras clínicas, plantões, protocolos e medicamentos para uso pessoal.">
-  <link rel="manifest" href="./manifest.webmanifest">
-  <link rel="icon" href="./icon.svg" type="image/svg+xml">
-  <title>RebecaPed</title>
-  <style>
-    :root{--forest:#294a3a;--bg:#f3f5ef;--card:#f7f0e4;--border:#ddd7c9;--ink:#25352d;--muted:#6f7e73;--terra:#c7795a;--sage:#9eaf91;--red:#b83e3e;--white:#fffdf9;--shadow:0 5px 18px #294a3a12}
-    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif}
-    header{background:var(--forest);color:white;padding:22px 20px 24px;border-radius:0 0 28px 28px;position:sticky;top:0;z-index:3;box-shadow:var(--shadow)}
-    .brand{display:flex;align-items:center;gap:14px}.brandmark{width:52px;height:52px;border-radius:17px;background:#ffffff1c;display:grid;place-items:center;font-size:27px}.brand h1{font-size:25px;margin:0;font-weight:750;letter-spacing:-.5px}.brand p{margin:4px 0 0;color:#d8e3d9;font-size:14px}
-    main{padding:18px 16px 110px;max-width:760px;margin:auto}.page{display:none}.page.active{display:block}
-    h2{font-size:23px;margin:7px 2px 5px;letter-spacing:-.4px}.sub{color:var(--muted);margin:0 2px 18px;font-size:14px;line-height:1.45}
-    .search{width:100%;border:1px solid var(--border);border-radius:16px;padding:14px 15px;font-size:16px;background:var(--white);margin:6px 0 16px;outline-color:var(--sage)}
-    .grid{display:grid;grid-template-columns:1fr;gap:12px}.card{border:1px solid var(--border);border-radius:22px;background:var(--card);padding:16px;box-shadow:var(--shadow)}
-    .tile{display:flex;align-items:center;gap:14px;text-align:left;width:100%;color:inherit;cursor:pointer}.icon{width:48px;height:48px;flex:0 0 48px;border-radius:16px;display:grid;place-items:center;font-size:23px;background:#e4eddf;color:var(--forest);border:1px solid #cddbc8}.icon.terra{background:#f8e4d9;color:#984d31;border-color:#ecc5b2}.icon.blue{background:#e0edf0;color:#2b6974;border-color:#c1dce0}.icon.gold{background:#f8edcf;color:#956718;border-color:#e9d79d}.icon.purple{background:#ece4f6;color:#7652a3;border-color:#d9c8ee}.tile h3{margin:0 0 5px;font-size:16px;line-height:1.25}.tile p{margin:0;color:var(--muted);font-size:13px;line-height:1.35}.chevron{margin-left:auto;color:#70857a;font-size:22px}
-    .section-title{font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin:22px 4px 9px;font-weight:800}.actions{display:flex;gap:9px;flex-wrap:wrap;margin:10px 0 18px}
-    button,.button{border:0;border-radius:13px;padding:12px 15px;background:var(--forest);color:#fff;font-weight:650;font-size:14px;cursor:pointer}.secondary{background:#e7e9df;color:var(--forest);border:1px solid var(--border)}.danger{background:#f8e2df;color:var(--red)}button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid #c7795a66;outline-offset:2px}
-    .form{display:grid;grid-template-columns:1fr;gap:12px}.field label{display:block;font-size:13px;font-weight:700;margin:0 0 6px}.field input,.field select,.field textarea{width:100%;padding:12px;border-radius:12px;border:1px solid var(--border);background:var(--white);font:inherit;color:var(--ink);min-width:0}.field textarea{min-height:84px;resize:vertical}.form-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-    .result{background:#e5eddf;border:1px solid #c9d8c2;border-radius:16px;padding:15px;margin-top:12px;line-height:1.5}.warning{background:#fff0d8;border:1px solid #ead1a1;border-radius:14px;padding:12px;color:#6f4b12;font-size:13px;line-height:1.45;margin:12px 0}
-    .empty{padding:22px 14px;text-align:center;color:var(--muted);font-size:14px;border:1px dashed var(--border);border-radius:18px}.listitem{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}.listitem h3{margin:0 0 5px;font-size:15px}.listitem p{margin:0 0 4px;color:var(--muted);font-size:13px;line-height:1.4}.money{font-weight:800;color:var(--forest);white-space:nowrap}
-    .bottom{position:fixed;bottom:0;left:0;right:0;background:#fffdf9f5;backdrop-filter:blur(12px);border-top:1px solid #d6e4d9;padding:8px max(8px,env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom));display:grid;grid-template-columns:repeat(5,1fr);z-index:5}
-    .nav{border:0;background:transparent;color:#71857a;padding:5px 2px;display:flex;flex-direction:column;align-items:center;gap:4px;font-size:10px;font-weight:700}.nav span:first-child{font-size:22px;line-height:1.2}.nav.active{color:var(--forest)}.nav.active span:first-child{color:var(--terra)}
-    .small{font-size:12px;color:var(--muted);line-height:1.5}.badge{display:inline-block;border-radius:99px;background:#e5eddf;color:var(--forest);padding:4px 8px;font-size:11px;font-weight:750;margin:3px 3px 0 0}
-    .monthrow{display:flex;justify-content:space-between;align-items:center;gap:10px}.monthrow h3{margin:0}.summary{display:grid;grid-template-columns:1fr 1fr;gap:10px}.metric{padding:13px;border-radius:16px;background:#fffdf9;border:1px solid var(--border)}.metric .label{font-size:12px;color:var(--muted)}.metric strong{display:block;margin-top:6px;font-size:18px}
-    footer{padding:16px 3px;color:var(--muted);font-size:11px;text-align:center}
-    @media(min-width:600px){main{padding-left:24px;padding-right:24px}.grid.two{grid-template-columns:1fr 1fr}.form.two{grid-template-columns:1fr 1fr}.tile h3{font-size:17px}}
-  </style>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#102b32">
+  <meta name="description" content="Calculadoras de apoio, referências clínicas e controle de plantões em um só lugar.">
+  <title>Meu Plantão</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<header><div class="brand"><div class="brandmark">✚</div><div><h1>RebecaPed</h1><p>Ferramentas clínicas para o dia a dia</p></div></div></header>
-<main>
-  <section class="page active" id="page-home">
-    <h2>Olá, Rebeca</h2><p class="sub">Seu apoio de bolso para a rotina pediátrica.</p>
-    <input class="search" id="globalSearch" placeholder="⌕  Buscar calculadora, medicamento ou protocolo" aria-label="Buscar">
-    <div class="grid two">
-      <button class="card tile" data-go="calcs"><span class="icon terra">⌗</span><span><h3>Calculadoras</h3><p>Cálculos clínicos e nutricionais</p></span><span class="chevron">›</span></button>
-      <button class="card tile" data-go="meds"><span class="icon blue">＋</span><span><h3>Medicamentos</h3><p>Consulta e cálculo por peso</p></span><span class="chevron">›</span></button>
-      <button class="card tile" data-go="protocols"><span class="icon gold">▤</span><span><h3>Protocolos clínicos</h3><p>Sua biblioteca hospitalar</p></span><span class="chevron">›</span></button>
-      <button class="card tile" data-go="shifts"><span class="icon purple">▦</span><span><h3>Plantões</h3><p>Agenda e resumo financeiro</p></span><span class="chevron">›</span></button>
-    </div>
-    <div class="section-title">Próximos plantões</div><div id="homeShifts" class="grid"><div class="empty">Seus próximos plantões aparecerão aqui após o cadastro.</div></div>
-    <div class="section-title">Acesso rápido</div><div id="homeCalcs" class="grid"></div>
-    <div class="warning"><strong>Uso clínico:</strong> esta versão inicial é um protótipo. Não utilize resultados para decisões assistenciais antes da validação das fórmulas, referências e limites por profissional habilitado.</div>
-  </section>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Navegação principal">
+      <a class="brand" href="#inicio" aria-label="Meu Plantão, início">
+        <span class="brand-mark">M</span><span>meu<span class="brand-light">plantão</span></span>
+      </a>
+      <div class="nav-label">ESPAÇO DE TRABALHO</div>
+      <nav class="main-nav">
+        <button class="nav-item active" data-page="inicio"><span class="nav-icon">⌂</span>Visão geral</button>
+        <button class="nav-item" data-page="calculadoras"><span class="nav-icon">∑</span>Calculadoras</button>
+        <button class="nav-item" data-page="medicacoes"><span class="nav-icon">＋</span>Medicações e bulas</button>
+        <button class="nav-item" data-page="protocolos"><span class="nav-icon">▤</span>Protocolos</button>
+        <button class="nav-item" data-page="plantoes"><span class="nav-icon">▦</span>Plantões</button>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="offline-indicator"><span></span>Dados salvos neste dispositivo</div>
+        <p>Ferramenta de apoio. Confira doses, unidades e fontes antes de usar em atendimento.</p>
+      </div>
+    </aside>
 
-  <section class="page" id="page-calcs">
-    <h2>Calculadoras</h2><p class="sub">Ferramentas por área clínica. Toque em uma opção para abrir.</p>
-    <input class="search" id="calcSearch" placeholder="⌕  Buscar calculadora">
-    <div class="section-title">Nutrição e metabolismo</div><div class="grid" id="calcNutrition"></div>
-    <div class="section-title">Emergência e terapia intensiva</div><div class="grid" id="calcCritical"></div>
-    <div class="section-title">Neonatologia e infectologia</div><div class="grid" id="calcOther"></div>
-    <div id="calcDetail"></div>
-  </section>
+    <main class="main-area">
+      <header class="topbar">
+        <div class="mobile-brand"><span class="brand-mark">M</span>meu<span class="brand-light">plantão</span></div>
+        <div class="topbar-right"><span class="today-label" id="todayLabel"></span><span class="avatar">MP</span></div>
+      </header>
 
-  <section class="page" id="page-shifts">
-    <h2>Plantões</h2><p class="sub">Calendário profissional e resumo financeiro mensal.</p>
-    <div class="card">
-      <div class="monthrow"><button class="secondary" id="prevMonth">‹</button><h3 id="monthTitle"></h3><button class="secondary" id="nextMonth">›</button></div>
-      <div style="height:12px"></div><div class="summary" id="shiftSummary"></div>
-    </div>
-    <div class="actions"><button id="addShiftBtn">＋ Novo plantão</button><button class="secondary" id="exportShifts">Exportar dados</button><label class="button secondary" for="importShifts">Importar dados</label><input id="importShifts" type="file" accept="application/json" hidden></div>
-    <div id="shiftFormWrap"></div>
-    <div class="section-title">Plantões do mês</div><div id="shiftList" class="grid"></div>
-  </section>
+      <section class="page active" id="page-inicio">
+        <div class="welcome-row"><div><p class="eyebrow">SEU TURNO, MAIS ORGANIZADO</p><h1>Visão geral</h1><p class="muted">Acesso rápido às ferramentas que você usa no plantão.</p></div><button class="button primary" data-go="plantoes">＋ Registrar plantão</button></div>
+        <div class="stats-grid">
+          <article class="stat-card"><div class="stat-top"><span>Ganhos neste mês</span><span class="stat-icon mint">R$</span></div><strong id="homeEarnings">R$ 0,00</strong><small id="homeShiftCount">0 plantões registrados</small></article>
+          <article class="stat-card"><div class="stat-top"><span>Horas neste mês</span><span class="stat-icon blue">◷</span></div><strong id="homeHours">0 h</strong><small>Com base nos horários lançados</small></article>
+          <article class="stat-card"><div class="stat-top"><span>Medicações salvas</span><span class="stat-icon gold">＋</span></div><strong id="homeMedCount">0</strong><small>Suas referências rápidas</small></article>
+          <article class="stat-card"><div class="stat-top"><span>Protocolos salvos</span><span class="stat-icon violet">▤</span></div><strong id="homeProtocolCount">0</strong><small>Links e documentos de referência</small></article>
+        </div>
+        <div class="section-heading"><div><p class="eyebrow">ATALHOS</p><h2>O que você precisa agora?</h2></div></div>
+        <div class="shortcut-grid">
+          <button class="shortcut-card" data-go="calculadoras"><span class="shortcut-symbol mint">∑</span><span><b>Calcular dose e volume</b><small>Use os valores da prescrição e da apresentação.</small></span><span class="arrow">↗</span></button>
+          <button class="shortcut-card" data-go="medicacoes"><span class="shortcut-symbol blue">＋</span><span><b>Consultar medicações</b><small>Abra suas referências e o Bulário da Anvisa.</small></span><span class="arrow">↗</span></button>
+          <button class="shortcut-card" data-go="protocolos"><span class="shortcut-symbol violet">▤</span><span><b>Abrir protocolos</b><small>Consulte os links que você salvou.</small></span><span class="arrow">↗</span></button>
+          <button class="shortcut-card" data-go="plantoes"><span class="shortcut-symbol gold">▦</span><span><b>Ver calendário</b><small>Registre horários e acompanhe seus ganhos.</small></span><span class="arrow">↗</span></button>
+        </div>
+        <div class="notice"><span class="notice-icon">i</span><div><b>Referências clínicas</b><p>Esta versão não recomenda tratamentos nem fornece doses padrão. Use doses prescritas e confira a bula profissional ou o protocolo vigente.</p></div></div>
+      </section>
 
-  <section class="page" id="page-protocols">
-    <h2>Protocolos clínicos</h2><p class="sub">Biblioteca pessoal de documentos, organizada por área e tema.</p>
-    <div class="card"><form id="protocolForm" class="form">
-      <div class="field"><label for="protocolTitle">Nome do protocolo</label><input id="protocolTitle" required placeholder="Ex.: Sepse pediátrica"></div>
-      <div class="form-row"><div class="field"><label for="protocolArea">Área</label><select id="protocolArea"><option>UTI pediátrica</option><option>UTI cardiológica pediátrica</option><option>Emergência pediátrica</option><option>Neonatologia</option><option>Infectologia</option><option>Cardiologia pediátrica</option><option>Nutrição</option><option>Procedimentos</option><option>Outros</option></select></div><div class="field"><label for="protocolTheme">Tema</label><input id="protocolTheme" placeholder="Ex.: Choque"></div></div>
-      <div class="field"><label for="protocolFile">Arquivo PDF</label><input id="protocolFile" type="file" accept="application/pdf,.pdf" required></div>
-      <div class="field"><label for="protocolNotes">Observações (opcional)</label><textarea id="protocolNotes" placeholder="Origem, versão, data de revisão..."></textarea></div>
-      <button type="submit">Salvar protocolo neste dispositivo</button>
-    </form></div>
-    <div class="warning">Os arquivos ficam armazenados localmente neste navegador. Não inclua documentos com dados identificáveis de pacientes. Faça cópias de segurança e confira a versão vigente dos protocolos hospitalares.</div>
-    <div class="section-title">Documentos salvos</div><div id="protocolList" class="grid"></div>
-  </section>
+      <section class="page" id="page-calculadoras">
+        <div class="page-heading"><div><p class="eyebrow">CÁLCULO COM VALORES INFORMADOS POR VOCÊ</p><h1>Calculadoras</h1><p class="muted">Ferramentas aritméticas. Elas não escolhem medicamento nem recomendam dose.</p></div></div>
+        <div class="calculator-layout">
+          <div class="calc-tabs" role="tablist" aria-label="Tipo de cálculo">
+            <button class="calc-tab active" data-calc="peso">Dose por peso</button>
+            <button class="calc-tab" data-calc="volume">Dose para volume</button>
+            <button class="calc-tab" data-calc="infusao">Velocidade de infusão</button>
+          </div>
+          <article class="panel calc-panel" id="calc-peso">
+            <div class="panel-title"><div><span class="mini-icon mint">kg</span><div><h2>Dose informada por peso</h2><p>Converte mg/kg em quantidade e volume com a concentração informada.</p></div></div></div>
+            <label>Medicação salva <span class="unit">opcional</span><select id="doseMedication"><option value="">Informar valores manualmente</option></select></label>
+            <div class="form-grid">
+              <label>Peso <span class="unit">kg</span><input id="doseWeight" type="number" min="0.001" step="any" placeholder="Ex.: 12,5"></label>
+              <label>Dose prescrita <span class="unit">mg/kg</span><input id="dosePerKg" type="number" min="0" step="any" placeholder="Digite a dose prescrita"></label>
+              <label>Concentração <span class="unit">mg/mL</span><input id="doseConcentration" type="number" min="0.001" step="any" placeholder="Consulte a apresentação"></label>
+              <label>Limite por dose (opcional) <span class="unit">mg</span><input id="doseMaximum" type="number" min="0" step="any" placeholder="Se indicado na referência"></label>
+            </div>
+            <button class="button primary" id="calculateDose">Calcular</button>
+            <div class="result-box hidden" id="doseResult" aria-live="polite"></div>
+          </article>
+          <article class="panel calc-panel hidden" id="calc-volume">
+            <div class="panel-title"><div><span class="mini-icon blue">mL</span><div><h2>Quantidade em volume</h2><p>Converte uma quantidade de princípio ativo para volume.</p></div></div></div>
+            <div class="form-grid two-col">
+              <label>Quantidade prescrita <span class="unit">mg</span><input id="amountMg" type="number" min="0" step="any" placeholder="mg"></label>
+              <label>Concentração <span class="unit">mg/mL</span><input id="amountConcentration" type="number" min="0.001" step="any" placeholder="mg/mL"></label>
+            </div>
+            <button class="button primary" id="calculateVolume">Calcular volume</button>
+            <div class="result-box hidden" id="volumeResult" aria-live="polite"></div>
+          </article>
+          <article class="panel calc-panel hidden" id="calc-infusao">
+            <div class="panel-title"><div><span class="mini-icon violet">mL/h</span><div><h2>Velocidade de infusão</h2><p>Calcula volume total dividido pelo tempo informado.</p></div></div></div>
+            <div class="form-grid two-col">
+              <label>Volume total <span class="unit">mL</span><input id="infusionVolume" type="number" min="0" step="any" placeholder="mL"></label>
+              <label>Duração <span class="unit">horas</span><input id="infusionHours" type="number" min="0.001" step="any" placeholder="horas"></label>
+            </div>
+            <button class="button primary" id="calculateInfusion">Calcular velocidade</button>
+            <div class="result-box hidden" id="infusionResult" aria-live="polite"></div>
+          </article>
+          <p class="clinical-footnote"><b>Confira antes de usar:</b> unidade, peso, dose prescrita, concentração, limite máximo e via de administração na fonte profissional vigente. O resultado é apenas uma operação matemática.</p>
+        </div>
+      </section>
 
-  <section class="page" id="page-meds">
-    <h2>Medicamentos</h2><p class="sub">Base preparada para consulta de bula e cálculo pediátrico por peso.</p>
-    <input class="search" id="medSearch" placeholder="⌕  Buscar medicamento">
-    <div class="warning"><strong>Base clínica ainda não validada.</strong> Esta versão não contém uma base de doses pronta para prescrição. Não serão exibidas doses calculadas sem referência, indicação, faixa etária, concentração e limites validados.</div>
-    <div class="card"><h3 style="margin-top:0">Calculadora de dose</h3><div class="form">
-      <div class="field"><label for="medName">Medicamento / esquema validado</label><select id="medName"><option value="">Selecione um medicamento cadastrado</option></select></div>
-      <div class="form-row"><div class="field"><label for="medWeight">Peso (kg)</label><input id="medWeight" type="number" min="0.1" max="200" step="0.01" placeholder="Ex.: 12.5"></div><div class="field"><label for="medDose">Dose de referência</label><input id="medDose" type="number" min="0" step="any" placeholder="Somente após validação"></div></div>
-      <p class="small">O campo de dose está desativado até que o esquema seja cadastrado e validado com fonte clínica, indicação, unidade, intervalo e dose máxima.</p>
-      <button type="button" class="secondary" id="medCalcBtn">Calcular</button><div id="medResult"></div>
-    </div></div>
-    <div class="section-title">Fichas técnicas</div><div id="medList" class="grid"></div>
-  </section>
+      <section class="page" id="page-medicacoes">
+        <div class="page-heading split-heading"><div><p class="eyebrow">REFERÊNCIAS RÁPIDAS</p><h1>Medicações e bulas</h1><p class="muted">Salve suas próprias referências. Não há posologias pré-carregadas.</p></div><button class="button primary" id="addMedication">＋ Salvar referência</button></div>
+        <div class="source-card"><div class="source-logo">ANVISA</div><div class="source-copy"><b>Bulário Eletrônico</b><p>Consulte a bula profissional e confirme produto, concentração e apresentação.</p></div><a class="button secondary" href="https://consultas.anvisa.gov.br/#/bulario/" target="_blank" rel="noopener">Abrir Bulário ↗</a></div>
+        <div class="section-heading"><div><p class="eyebrow">SEU CATÁLOGO</p><h2>Referências salvas</h2></div></div>
+        <div id="medicationList" class="list-grid"></div>
+      </section>
 
-  <section class="page" id="page-more">
-    <h2>Mais</h2><p class="sub">Configurações, cópias de segurança e informações.</p>
-    <div class="card"><h3>Dados locais</h3><p class="small">Plantões e protocolos ficam neste dispositivo e navegador. Limpar os dados do navegador pode apagar os registros. Use exportação regularmente.</p><div class="actions"><button id="backupAll">Exportar plantões e índice de protocolos</button></div></div>
-    <div class="card" style="margin-top:12px"><h3>Sobre o RebecaPed</h3><p class="small">Protótipo pessoal de calculadoras clínicas, agenda de plantões, biblioteca de protocolos e consulta de medicamentos. As calculadoras clínicas e a base de medicamentos deverão passar por validação antes do uso assistencial.</p><p class="small">Versão 0.1 · armazenamento local · interface preparada para uso offline após instalação em hospedagem HTTPS.</p></div>
-  </section>
-</main>
-<nav class="bottom" aria-label="Navegação principal">
-  <button class="nav active" data-page="home"><span>⌂</span><span>Início</span></button>
-  <button class="nav" data-page="calcs"><span>▦</span><span>Calcs</span></button>
-  <button class="nav" data-page="shifts"><span>▣</span><span>Plantões</span></button>
-  <button class="nav" data-page="protocols"><span>▤</span><span>Protocolos</span></button>
-  <button class="nav" data-page="more"><span>☰</span><span>Mais</span></button>
-</nav>
-<script>
-const DB_NAME='RebecaPedDB', DB_VERSION=1;
-let db, currentMonth=new Date(new Date().getFullYear(),new Date().getMonth(),1);
-const calcData=[
- {name:'GEB Mifflin–St Jeor',desc:'Gasto energético basal · equação adulta',cat:'nutrition',icon:'∿',color:'gold',id:'mifflin'},
- {name:'Energia DRI/NASEM',desc:'Necessidade energética · pediatria',cat:'nutrition',icon:'▦',color:'green',id:'dri'},
- {name:'Energia FAO/WHO/UNU',desc:'Necessidade energética total',cat:'nutrition',icon:'♨',color:'gold',id:'fao'},
- {name:'Calorimetria indireta',desc:'Weir · VO₂/VCO₂',cat:'nutrition',icon:'◴',color:'blue',id:'weir'},
- {name:'Energia em nutrição parenteral',desc:'ESPGHAN/ESPEN/ESPR/CSPEN',cat:'nutrition',icon:'⚕',color:'terra',id:'np'},
- {name:'Manejo da desnutrição aguda',desc:'OMS/SBP/MS · diagnóstico e cuidado',cat:'nutrition',icon:'♧',color:'green',id:'malnutrition'},
- {name:'Queimaduras — Lund & Browder',desc:'Superfície corporal queimada por idade',cat:'critical',icon:'♨',color:'terra',id:'burns'},
- {name:'Infusão contínua',desc:'Preparo, diluição e vazão em bomba',cat:'critical',icon:'♧',color:'blue',id:'infusion'},
- {name:'Vasopressores',desc:'Infusão contínua em sepse pediátrica',cat:'critical',icon:'♡',color:'terra',id:'vaso'},
- {name:'Reposição de bicarbonato',desc:'Acidose metabólica · NaHCO₃',cat:'critical',icon:'▤',color:'blue',id:'bicarb'},
- {name:'Idade corrigida do prematuro',desc:'Idade corrigida, IPM, prematuridade e DPP',cat:'other',icon:'▦',color:'purple',id:'corrected'},
- {name:'FiO₂ em baixo fluxo',desc:'Cânula nasal · O₂ efetivo estimado',cat:'other',icon:'≋',color:'blue',id:'fio2'},
- {name:'Centor e McIsaac',desc:'Centor modificado · faringite estreptocócica',cat:'other',icon:'♧',color:'blue',id:'centor'}
-];
-const $=id=>document.getElementById(id);
-function openDB(){return new Promise((resolve,reject)=>{const req=indexedDB.open(DB_NAME,DB_VERSION);req.onupgradeneeded=()=>{const d=req.result;if(!d.objectStoreNames.contains('protocols'))d.createObjectStore('protocols',{keyPath:'id',autoIncrement:true});};req.onsuccess=()=>{db=req.result;resolve(db)};req.onerror=()=>reject(req.error)})}
-function store(name,mode='readonly'){return db.transaction(name,mode).objectStore(name)}
-function getProtocols(){return new Promise((resolve,reject)=>{const r=store('protocols').getAll();r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})}
-function addProtocol(p){return new Promise((resolve,reject)=>{const r=store('protocols','readwrite').add(p);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})}
-function deleteProtocol(id){return new Promise((resolve,reject)=>{const r=store('protocols','readwrite').delete(Number(id));r.onsuccess=resolve;r.onerror=()=>reject(r.error)})}
-function shifts(){try{return JSON.parse(localStorage.getItem('rp_shifts')||'[]')}catch{return []}}
-function saveShifts(a){localStorage.setItem('rp_shifts',JSON.stringify(a))}
-function brl(v){return Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}
-function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-function showPage(p){document.querySelectorAll('.page').forEach(x=>x.classList.toggle('active',x.id==='page-'+p));document.querySelectorAll('.nav').forEach(x=>x.classList.toggle('active',x.dataset.page===p));if(p==='shifts')renderShifts();if(p==='protocols')renderProtocols();if(p==='home')renderHome();window.scrollTo({top:0,behavior:'smooth'})}
-document.querySelectorAll('[data-page]').forEach(b=>b.addEventListener('click',()=>showPage(b.dataset.page)));
-document.querySelectorAll('[data-go]').forEach(b=>b.addEventListener('click',()=>showPage(b.dataset.go)));
-function calcCard(c){return `<button class="card tile" data-calc="${c.id}"><span class="icon ${c.color==='green'?'':c.color}">${c.icon}</span><span><h3>${c.name}</h3><p>${c.desc}</p></span><span class="chevron">›</span></button>`}
-function renderCalcLists(filter=''){const f=filter.toLowerCase();for(const [cat,id] of [['nutrition','calcNutrition'],['critical','calcCritical'],['other','calcOther']])$(id).innerHTML=calcData.filter(c=>c.cat===cat&&(`${c.name} ${c.desc}`).toLowerCase().includes(f)).map(calcCard).join('')||'<div class="empty">Nenhuma calculadora encontrada.</div>';document.querySelectorAll('[data-calc]').forEach(b=>b.onclick=()=>openCalc(b.dataset.calc))}
-$('calcSearch').addEventListener('input',e=>renderCalcLists(e.target.value));
-$('globalSearch').addEventListener('input',e=>{if(e.target.value.trim()){showPage('calcs');$('calcSearch').value=e.target.value;renderCalcLists(e.target.value)}});
-function openCalc(id){const c=calcData.find(x=>x.id===id);const host=$('calcDetail');let form='';
-const pending=`<div class="warning"><strong>Validação pendente.</strong> Esta ferramenta está listada no protótipo, mas sua fórmula clínica ainda precisa ser configurada e testada com a referência correspondente. Não use para orientar condutas até a validação.</div>`;
-if(id==='corrected') form=`<div class="form"><div class="field"><label>Data de nascimento</label><input id="cbirth" type="date"></div><div class="field"><label>Idade gestacional ao nascer (semanas + dias)</label><div class="form-row"><input id="cweeks" type="number" min="20" max="42" placeholder="Semanas"><input id="cdays" type="number" min="0" max="6" placeholder="Dias"></div></div><div class="field"><label>Data de referência</label><input id="cref" type="date" value="${new Date().toISOString().slice(0,10)}"></div><button id="calcCorrected">Calcular idade</button><div id="calcResult"></div></div>`;
-else if(id==='mifflin') form=`<div class="warning">Equação desenvolvida para adultos; não deve ser aplicada como estimativa pediátrica.</div><div class="form"><div class="field"><label>Sexo utilizado pela equação</label><select id="ms"><option value="f">Feminino</option><option value="m">Masculino</option></select></div><div class="form-row"><div class="field"><label>Peso (kg)</label><input id="mw" type="number" min="1" step=".1"></div><div class="field"><label>Altura (cm)</label><input id="mh" type="number" min="30" step=".1"></div></div><div class="field"><label>Idade (anos)</label><input id="ma" type="number" min="18" max="120"></div><button id="calcMifflin">Calcular GEB</button><div id="calcResult"></div></div>`;
-else if(id==='weir') form=`<div class="warning">Utilize apenas valores obtidos por calorimetria indireta, com unidades confirmadas. A equação e os fatores aplicáveis devem ser validados antes do uso clínico.</div><div class="form"><div class="form-row"><div class="field"><label>VO₂ (mL/min)</label><input id="vo2" type="number" min="0" step="any"></div><div class="field"><label>VCO₂ (mL/min)</label><input id="vco2" type="number" min="0" step="any"></div></div><button id="calcWeir">Calcular estimativa</button><div id="calcResult"></div></div>`;
-else form=pending;
-host.innerHTML=`<div class="section-title">Calculadora selecionada</div><div class="card"><div class="tile"><span class="icon ${c.color}">${c.icon}</span><span><h3>${c.name}</h3><p>${c.desc}</p></span></div><div style="height:14px"></div>${form}<p class="small">Referências e versão do cálculo deverão aparecer nesta área após a validação técnica.</p><button class="secondary" id="closeCalc">Fechar calculadora</button></div>`;
-$('closeCalc').onclick=()=>host.innerHTML='';
-if(id==='corrected')$('calcCorrected').onclick=()=>{const b=$('cbirth').value,r=$('cref').value,w=+$('cweeks').value,d=+$('cdays').value;if(!b||!r||!w||d<0||d>6||new Date(r)<new Date(b)){return $('calcResult').innerHTML='<div class="warning">Confira as datas e a idade gestacional.</div>'}const days=Math.floor((new Date(r)-new Date(b))/86400000),pm=days+w*7+d,corrected=pm-280;const cd=Math.max(0,corrected);$('calcResult').innerHTML=`<div class="result"><strong>Idade cronológica:</strong> ${Math.floor(days/7)} semanas e ${days%7} dias<br><strong>Idade pós-menstrual:</strong> ${Math.floor(pm/7)} semanas e ${pm%7} dias<br><strong>Idade corrigida aproximada:</strong> ${Math.floor(cd/30.4375)} meses e ${Math.floor(cd%30.4375)} dias<br><span class="small">Estimativa matemática; confirme convenção e aplicabilidade clínica. Idade corrigida não deve ser interpretada isoladamente.</span></div>`};
-if(id==='mifflin')$('calcMifflin').onclick=()=>{const w=+$('mw').value,h=+$('mh').value,a=+$('ma').value;if(w<=0||h<=0||a<18)return $('calcResult').innerHTML='<div class="warning">Preencha peso, altura e idade adulta válida.</div>';const val=10*w+6.25*h-5*a+($('ms').value==='m'?5:-161);$('calcResult').innerHTML=`<div class="result"><strong>GEB estimado: ${val.toFixed(0)} kcal/dia</strong><br><span class="small">Equação de Mifflin–St Jeor para adultos. Não utilizar como equação pediátrica.</span></div>`};
-if(id==='weir')$('calcWeir').onclick=()=>{const o=+$('vo2').value,c=+$('vco2').value;if(o<=0||c<0)return $('calcResult').innerHTML='<div class="warning">Informe valores válidos em mL/min.</div>';const val=3.941*o+1.106*c;$('calcResult').innerHTML=`<div class="result"><strong>Estimativa: ${val.toFixed(0)} kcal/dia</strong><br><span class="small">Equação de Weir simplificada. Confirme a convenção de unidades, o protocolo do equipamento e a aplicabilidade antes de uso clínico.</span></div>`}
-}
-function renderHome(){const arr=shifts().filter(s=>s.date>=new Date().toISOString().slice(0,10)).sort((a,b)=>a.date.localeCompare(b.date)).slice(0,3);$('homeShifts').innerHTML=arr.length?arr.map(s=>`<div class="card listitem"><div><h3>${esc(s.place)}</h3><p>${esc(s.date)} · ${esc(s.start)}–${esc(s.end)}</p></div><div class="money">${brl(s.value)}</div></div>`).join(''):'<div class="empty">Seus próximos plantões aparecerão aqui após o cadastro.</div>';$('homeCalcs').innerHTML=calcData.slice(0,3).map(calcCard).join('');document.querySelectorAll('#homeCalcs [data-calc]').forEach(b=>b.onclick=()=>{showPage('calcs');openCalc(b.dataset.calc)})}
-function monthKey(d){return d.slice(0,7)}
-function renderShifts(){const key=`${currentMonth.getFullYear()}-${String(currentMonth.getMonth()+1).padStart(2,'0')}`;$('monthTitle').textContent=currentMonth.toLocaleDateString('pt-BR',{month:'long',year:'numeric'});const list=shifts().filter(s=>monthKey(s.date)===key).sort((a,b)=>(a.date+a.start).localeCompare(b.date+b.start));const total=list.reduce((a,s)=>a+Number(s.value||0),0);const hours=list.reduce((a,s)=>{let [sh,sm]=s.start.split(':').map(Number),[eh,em]=s.end.split(':').map(Number);let mins=eh*60+em-(sh*60+sm);if(mins<0)mins+=1440;return a+mins/60},0);$('shiftSummary').innerHTML=`<div class="metric"><span class="label">Plantões cadastrados</span><strong>${list.length}</strong></div><div class="metric"><span class="label">Horas previstas</span><strong>${hours.toLocaleString('pt-BR',{maximumFractionDigits:1})} h</strong></div><div class="metric"><span class="label">Valor combinado</span><strong>${brl(total)}</strong></div><div class="metric"><span class="label">Média por hora</span><strong>${hours?brl(total/hours):brl(0)}</strong></div>`;$('shiftList').innerHTML=list.length?list.map(s=>`<div class="card listitem"><div><h3>${esc(s.place)} <span class="badge">${esc(s.type||'Plantão')}</span></h3><p>${esc(s.date)} · ${esc(s.start)}–${esc(s.end)}</p><p>${esc(s.notes||'')}</p></div><div style="text-align:right"><div class="money">${brl(s.value)}</div><button class="danger" style="margin-top:8px;padding:7px 9px" data-del-shift="${s.id}">Excluir</button></div></div>`).join(''):'<div class="empty">Nenhum plantão cadastrado neste mês.</div>';document.querySelectorAll('[data-del-shift]').forEach(b=>b.onclick=()=>{if(confirm('Excluir este plantão?')){saveShifts(shifts().filter(s=>s.id!==b.dataset.delShift));renderShifts();renderHome()}})}
-$('prevMonth').onclick=()=>{currentMonth.setMonth(currentMonth.getMonth()-1);renderShifts()};$('nextMonth').onclick=()=>{currentMonth.setMonth(currentMonth.getMonth()+1);renderShifts()};
-$('addShiftBtn').onclick=()=>{$('shiftFormWrap').innerHTML=`<div class="card"><h3 style="margin-top:0">Novo plantão</h3><form id="shiftForm" class="form"><div class="field"><label>Local / hospital</label><input name="place" required placeholder="Ex.: UTI pediátrica"></div><div class="form-row"><div class="field"><label>Data</label><input name="date" type="date" required value="${new Date().toISOString().slice(0,10)}"></div><div class="field"><label>Tipo</label><select name="type"><option>UTI pediátrica</option><option>UTI cardiológica pediátrica</option><option>Emergência pediátrica</option><option>Neonatologia</option><option>Outro</option></select></div></div><div class="form-row"><div class="field"><label>Início</label><input name="start" type="time" required value="07:00"></div><div class="field"><label>Término</label><input name="end" type="time" required value="19:00"></div></div><div class="field"><label>Valor combinado (R$)</label><input name="value" type="number" min="0" step=".01" required placeholder="0,00"></div><div class="field"><label>Observações</label><textarea name="notes" placeholder="Informações adicionais"></textarea></div><div class="actions"><button type="submit">Salvar plantão</button><button type="button" class="secondary" id="cancelShift">Cancelar</button></div></form></div>`;$('cancelShift').onclick=()=>$('shiftFormWrap').innerHTML='';$('shiftForm').onsubmit=e=>{e.preventDefault();const o=Object.fromEntries(new FormData(e.target).entries());o.id=crypto.randomUUID?crypto.randomUUID():String(Date.now());o.value=Number(o.value);saveShifts([...shifts(),o]);currentMonth=new Date(Number(o.date.slice(0,4)),Number(o.date.slice(5,7))-1,1);$('shiftFormWrap').innerHTML='';renderShifts();renderHome()}}
-$('exportShifts').onclick=()=>downloadJSON({app:'RebecaPed',version:1,shifts:shifts()},'rebecaped-plantoes.json');
-$('importShifts').onchange=async e=>{try{const j=JSON.parse(await e.target.files[0].text());if(!Array.isArray(j.shifts))throw Error();saveShifts(j.shifts);renderShifts();renderHome();alert('Plantões importados.')}catch{alert('Arquivo inválido.')}e.target.value=''};
-function downloadJSON(obj,name){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(obj,null,2)],{type:'application/json'}));a.download=name;a.click();URL.revokeObjectURL(a.href)}
-$('backupAll').onclick=async()=>{const ps=await getProtocols();downloadJSON({app:'RebecaPed',version:1,shifts:shifts(),protocols:ps.map(({id,title,area,theme,notes,fileName,addedAt})=>({id,title,area,theme,notes,fileName,addedAt,notice:'O índice não inclui o conteúdo binário dos PDFs; exporte os documentos originais separadamente.'}))},'rebecaped-backup-indice.json')};
-$('protocolForm').onsubmit=async e=>{e.preventDefault();const file=$('protocolFile').files[0];if(!file||file.type!=='application/pdf'&& !file.name.toLowerCase().endsWith('.pdf'))return alert('Selecione um PDF.');try{await addProtocol({title:$('protocolTitle').value,area:$('protocolArea').value,theme:$('protocolTheme').value,notes:$('protocolNotes').value,fileName:file.name,mimeType:file.type||'application/pdf',blob:file,addedAt:new Date().toISOString()});e.target.reset();renderProtocols();alert('Protocolo salvo neste dispositivo.')}catch(err){alert('Não foi possível salvar. Verifique o espaço disponível no dispositivo.')}};
-async function renderProtocols(){const list=await getProtocols();$('protocolList').innerHTML=list.length?list.sort((a,b)=>b.addedAt.localeCompare(a.addedAt)).map(p=>`<div class="card listitem"><div><h3>${esc(p.title)}</h3><p>${esc(p.area)} · ${esc(p.theme||'Sem tema')}</p><p>${esc(p.fileName)}${p.notes?' · '+esc(p.notes):''}</p><p class="small">Adicionado em ${new Date(p.addedAt).toLocaleDateString('pt-BR')}</p><button data-open-protocol="${p.id}">Abrir PDF</button> <button class="danger" data-del-protocol="${p.id}">Excluir</button></div></div>`).join(''):'<div class="empty">Nenhum protocolo importado.</div>';document.querySelectorAll('[data-open-protocol]').forEach(b=>b.onclick=async()=>{const p=(await getProtocols()).find(x=>x.id===Number(b.dataset.openProtocol));if(p){const url=URL.createObjectURL(p.blob);const win=window.open(url,'_blank');if(!win)alert('O navegador bloqueou a nova janela. Permita pop-ups para abrir o PDF.');setTimeout(()=>URL.revokeObjectURL(url),60000)}});document.querySelectorAll('[data-del-protocol]').forEach(b=>b.onclick=async()=>{if(confirm('Excluir este protocolo deste dispositivo?')){await deleteProtocol(b.dataset.delProtocol);renderProtocols()}})}
-$('medCalcBtn').onclick=()=>{$('medResult').innerHTML='<div class="warning">Nenhuma dose foi calculada. Primeiro é necessário cadastrar e validar o esquema específico, incluindo indicação, faixa etária, unidade, intervalo, concentração e dose máxima. Não use um valor isolado em mg/kg como prescrição.</div>'};
-$('medSearch').oninput=e=>{const q=e.target.value.trim();$('medList').innerHTML=q?`<div class="empty">Nenhuma ficha validada encontrada para “${esc(q)}”. A base será preenchida e revisada em uma etapa própria.</div>`:'<div class="empty">A base de medicamentos será adicionada após seleção e validação das referências.</div>'};
-renderCalcLists();renderHome();renderShifts();$('medList').innerHTML='<div class="empty">Ainda não há fichas farmacológicas validadas cadastradas.</div>';
-openDB().then(renderProtocols).catch(()=>{$('protocolList').innerHTML='<div class="warning">O armazenamento de protocolos não está disponível neste contexto. A PWA precisa ser servida por HTTPS ou localhost.</div>'});
-if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./service-worker.js').catch(()=>{});
-</script>
+      <section class="page" id="page-protocolos">
+        <div class="page-heading split-heading"><div><p class="eyebrow">DOCUMENTOS DE REFERÊNCIA</p><h1>Protocolos</h1><p class="muted">Guarde links e a data de revisão para encontrá-los durante o plantão.</p></div><button class="button primary" id="addProtocol">＋ Salvar protocolo</button></div>
+        <div class="source-card"><div class="source-logo ministry">MS</div><div class="source-copy"><b>Protocolos do Ministério da Saúde / CONITEC</b><p>Consulte documentos oficiais e confira a vigência antes de usar.</p></div><a class="button secondary" href="https://www.gov.br/saude/pt-br/assuntos/pcdt" target="_blank" rel="noopener">Consultar PCDT ↗</a></div>
+        <div class="section-heading"><div><p class="eyebrow">SUA BIBLIOTECA</p><h2>Protocolos salvos</h2></div></div>
+        <p class="form-hint protocol-storage-note">PDFs e imagens ficam no armazenamento deste navegador. O banco Supabase está preparado; a sincronização aguarda autenticação e integração do app.</p>
+        <div id="protocolList" class="list-grid"></div>
+      </section>
+
+      <section class="page" id="page-plantoes">
+        <div class="page-heading split-heading"><div><p class="eyebrow">AGENDA E RECEITAS</p><h1>Plantões</h1><p class="muted">Registre data, início, fim e valor. O relatório acompanha o mês selecionado.</p></div><button class="button primary" id="addShift">＋ Novo plantão</button></div>
+        <div class="shift-summary-grid"><article class="summary-card"><span>Ganhos no mês</span><strong id="monthEarnings">R$ 0,00</strong></article><article class="summary-card"><span>Plantões no mês</span><strong id="monthShiftCount">0</strong></article><article class="summary-card"><span>Horas registradas</span><strong id="monthHours">0 h</strong></article></div>
+        <div class="shift-layout">
+          <article class="panel calendar-panel"><div class="calendar-header"><button class="icon-button" id="prevMonth" aria-label="Mês anterior">‹</button><h2 id="monthTitle"></h2><button class="icon-button" id="nextMonth" aria-label="Próximo mês">›</button></div><div class="calendar-grid" id="calendarGrid"></div></article>
+          <article class="panel day-panel"><div class="day-panel-header"><div><p class="eyebrow">DIA SELECIONADO</p><h2 id="selectedDateTitle"></h2></div><button class="button secondary small" id="addShiftDay">＋ Plantão</button></div><div id="dayShiftList"></div></article>
+        </div>
+        <article class="panel report-panel"><div class="report-heading"><div><p class="eyebrow">RELATÓRIO</p><h2>Ganhos mensais</h2></div><span class="report-period" id="reportPeriod"></span></div><div id="monthlyReport"></div></article>
+      </section>
+      <footer class="footer">Meu Plantão · dados armazenados localmente neste navegador</footer>
+    </main>
+  </div>
+
+  <dialog id="shiftDialog" class="modal"><form method="dialog" id="shiftForm"><div class="modal-heading"><div><p class="eyebrow">AGENDA</p><h2 id="shiftDialogTitle">Novo plantão</h2></div><button type="button" class="icon-button" data-close="shiftDialog" aria-label="Fechar">×</button></div><input type="hidden" id="shiftId"><label>Data<input id="shiftDate" type="date" required></label><div class="form-grid two-col"><label>Início<input id="shiftStart" type="time" value="07:00" required></label><label>Fim<input id="shiftEnd" type="time" value="19:00" required></label></div><label>Valor do plantão <span class="unit">R$</span><input id="shiftValue" type="number" min="0" step="0.01" placeholder="0,00" required></label><p class="form-hint">Se o plantão terminar no dia seguinte, informe o horário de fim normalmente.</p><div class="modal-actions"><button type="button" class="button secondary" data-close="shiftDialog">Cancelar</button><button class="button primary" type="submit">Salvar plantão</button></div></form></dialog>
+
+  <dialog id="medicationDialog" class="modal"><form method="dialog" id="medicationForm"><div class="modal-heading"><div><p class="eyebrow">REFERÊNCIA PESSOAL</p><h2>Salvar medicação</h2></div><button type="button" class="icon-button" data-close="medicationDialog" aria-label="Fechar">×</button></div><label>Nome do medicamento<input id="medName" required placeholder="Ex.: nome do produto"></label><label>Apresentação<input id="medPresentation" placeholder="Como aparece na bula"></label><div class="form-grid two-col"><label>Dose <span class="unit">mg/kg/dose</span><input id="medDosePerKg" type="number" min="0" step="any" placeholder="Opcional"></label><label>Concentração <span class="unit">mg/mL</span><input id="medConcentration" type="number" min="0" step="any" placeholder="Opcional"></label></div><div class="form-grid two-col"><label>Limite por dose <span class="unit">mg</span><input id="medMaxDose" type="number" min="0" step="any" placeholder="Opcional"></label><label>Intervalo <span class="unit">texto da referência</span><input id="medInterval" placeholder="Ex.: conforme prescrição"></label></div><label>Contraindicações<textarea id="medContraindications" rows="3" placeholder="Transcreva apenas após conferir a fonte"></textarea></label><label>Interações importantes<textarea id="medInteractions" rows="3" placeholder="Transcreva apenas após conferir a fonte"></textarea></label><label>Link da bula profissional<input id="medUrl" type="url" placeholder="https://"></label><label>Data de revisão<input id="medReviewed" type="date"></label><p class="form-hint">A lista fica vazia até você cadastrar referências. “Não registrado” não significa que não existam contraindicações ou interações. Confira a bula e o protocolo vigentes.</p><div class="modal-actions"><button type="button" class="button secondary" data-close="medicationDialog">Cancelar</button><button class="button primary" type="submit">Salvar referência</button></div></form></dialog>
+
+  <dialog id="protocolDialog" class="modal"><form method="dialog" id="protocolForm"><div class="modal-heading"><div><p class="eyebrow">REFERÊNCIA PESSOAL</p><h2>Salvar protocolo</h2></div><button type="button" class="icon-button" data-close="protocolDialog" aria-label="Fechar">×</button></div><label>Título<input id="protocolTitle" required placeholder="Nome do protocolo"></label><label>Fonte / instituição<input id="protocolSource" placeholder="Ex.: Ministério da Saúde, sociedade médica"></label><label>Link do documento<input id="protocolUrl" type="url" placeholder="https://"></label><label>Data de revisão<input id="protocolReviewed" type="date"></label><label>Anexar PDFs ou imagens<input id="protocolFiles" type="file" accept="application/pdf,image/*" multiple></label><p class="form-hint">Anexos são guardados neste dispositivo. Confira a versão e a vigência da fonte antes de usar.</p><div class="modal-actions"><button type="button" class="button secondary" data-close="protocolDialog">Cancelar</button><button class="button primary" type="submit">Salvar protocolo</button></div></form></dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-config.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>

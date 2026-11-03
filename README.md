@@ -1,47 +1,33 @@
-# RebecaPed — protótipo PWA 0.1
+# Meu Plantão
 
-## Conteúdo
-- `index.html`: interface e funcionalidades iniciais.
-- `manifest.webmanifest`: configuração instalável.
-- `service-worker.js`: cache da interface para uso offline.
-- `icon.svg`: ícone do aplicativo.
+MVP local em português, com foco somente nas quatro áreas priorizadas: calculadoras, medicações/bulas, protocolos e calendário/relatório de plantões.
 
-## Como testar no computador
-A PWA precisa ser servida por `localhost` ou HTTPS; abrir o HTML diretamente como `file://` não ativa o Service Worker.
-1. Instale Python 3, se ainda não estiver instalado.
-2. Abra o terminal na pasta extraída.
-3. Execute: `python -m http.server 8000`
-4. No próprio computador, acesse `http://localhost:8000`.
+## Abrir
 
-## Como testar no iPhone
-Para instalar no iPhone, publique os arquivos em um host HTTPS confiável. Depois, no Safari do iPhone:
-1. Abra o endereço HTTPS do app.
-2. Toque em Compartilhar.
-3. Selecione “Adicionar à Tela de Início”.
-4. Abra pelo ícone criado.
+- Para usar todos os recursos, inclusive anexos, sirva esta pasta por HTTP em `localhost` (por exemplo, `py -m http.server 4173`) e abra `http://localhost:4173`.
+- O cache offline do app é habilitado quando ele é servido em `localhost` ou HTTPS. Também é possível abrir `index.html` diretamente para uma prévia, mas o armazenamento de anexos depende de IndexedDB.
 
-## O que funciona nesta versão
-- Navegação e identidade visual.
-- Catálogo com 13 calculadoras identificadas.
-- Calculadora de idade corrigida do prematuro (estimativa matemática).
-- Equação Mifflin–St Jeor para adultos, com aviso explícito de que não é pediátrica.
-- Equação simplificada de Weir, com aviso para validar a aplicabilidade.
-- Cadastro, edição por exclusão e resumo mensal de plantões, com cálculo de horas e valor médio por hora.
-- Importação local de PDFs para a biblioteca de protocolos via IndexedDB.
-- Estrutura inicial de medicamentos com bloqueio explícito de cálculo não validado.
-- Cache offline do shell após primeira carga bem-sucedida.
+## O que está implementado
 
-## Limitações e segurança
-- Este é um protótipo técnico, não um dispositivo médico validado.
-- As calculadoras clínicas ainda pendentes não produzem resultados; precisam de fórmulas, referências, testes e revisão clínica antes de serem habilitadas.
-- A área de medicamentos não contém doses prontas. Não usar para prescrição.
-- A função de exportação de protocolos exporta somente um índice, não os bytes dos PDFs. Mantenha cópias dos documentos originais.
-- Dados de plantões são armazenados no localStorage do navegador; PDFs ficam no IndexedDB. Limpar os dados do navegador pode apagar informações.
-- Use apenas protocolos sem dados identificáveis de pacientes.
-- A instalação offline depende de hospedagem HTTPS/localhost e pode variar conforme navegador e espaço de armazenamento.
+- Calculadoras aritméticas de dose por peso, volume pela concentração e velocidade de infusão. Os valores clínicos são sempre inseridos pelo usuário; não há dose padrão ou recomendação terapêutica.
+- Referências pessoais de medicamentos com dose e concentração opcionais, contraindicações, interações, fonte e data de revisão. Os campos começam vazios e precisam ser preenchidos/verificados por você; o app não verifica interações automaticamente.
+- Biblioteca pessoal de protocolos com fonte, link, data de revisão e anexos PDF/imagem. Cada arquivo pode ter até 20 MB.
+- Calendário mensal com registro de data, hora de início/fim e valor; relatório mensal por dia, quantidade de turnos e total de horas/ganhos. Turnos que cruzam a meia-noite são contabilizados como até 24 horas na data de início.
+- Persistência atual no navegador: dados em localStorage e anexos em IndexedDB. A configuração do cliente Supabase existe, mas o app ainda não autentica usuários nem sincroniza dados ou arquivos.
 
-## Próximas etapas recomendadas
-1. Validar as fórmulas e fontes de cada calculadora com referências clínicas atualizadas.
-2. Implementar os esquemas de medicamentos por indicação, faixa etária, unidade, intervalo, dose máxima e concentração, com testes de segurança.
-3. Implementar backup e restauração completos, incluindo PDFs.
-4. Testar a instalação e o comportamento offline em um iPhone real.
+## Limites dos dados clínicos
+
+O app não traz bulas, doses, posologias, contraindicações, interações ou protocolos clínicos pré-carregados. Ele calcula apenas a matemática dos valores informados e organiza referências que você cadastrar. “Não registrado” não quer dizer “não existe”. Confira produto, apresentação, unidades, prescrição, dose máxima e versão vigente da fonte antes de usar em atendimento.
+
+Fontes oficiais incluídas como atalhos:
+
+- Anvisa, [Bulário Eletrônico](https://consultas.anvisa.gov.br/#/bulario/). A Anvisa descreve o Bulário como acesso às bases de dados das bulas e diferencia as bulas destinadas a pacientes e profissionais de saúde.
+- Ministério da Saúde, [Protocolos Clínicos e Diretrizes Terapêuticas](https://www.gov.br/saude/pt-br/assuntos/pcdt). Os documentos oficiais devem ser consultados na fonte para confirmar conteúdo e vigência.
+
+## Supabase e catálogo amplo
+
+O catálogo de escopo observado está em `CATALOGO-MAPEADO.md`. O esquema inicial em `supabase/migrations/001_initial_schema.sql` foi aplicado manualmente pelo SQL Editor ao projeto BecaPed em 02/11/2026. A consulta de verificação encontrou as sete tabelas e o bucket privado `protocol-attachments`. A execução manual não cria uma entrada no histórico de migrações do Supabase CLI. A configuração pública em `supabase-config.js` inicializa o cliente JavaScript, mas não ativa autenticação, sincronização ou envio de anexos; essas operações ainda precisam ser implementadas no frontend.
+
+O Project URL e a chave pública `publishable` estão configurados. Não coloque a chave `service_role` no frontend ou em arquivos versionados. GitHub é opcional para versionamento/deploy; Supabase é necessário para autenticação, banco e armazenamento privado de arquivos.
+
+Este app é uma ferramenta auxiliar e não substitui julgamento clínico, prescrição nem protocolos institucionais.
