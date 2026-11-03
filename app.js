@@ -336,7 +336,63 @@ document.getElementById('calculateInfusion').addEventListener('click', () => {
   showCalculation('infusionResult', `<small>Resultado matemático a partir dos valores informados</small><strong>${number.format(volume / duration)} mL/h</strong><small>${number.format(volume)} mL ÷ ${number.format(duration)} horas. Confirme parâmetros e equipamento conforme protocolo local.</small>`);
 });
 
+const authClient = window.MEU_PLANTAO_SUPABASE_CLIENT;
+const authGate = document.getElementById('authGate');
+const appShell = document.getElementById('appShell');
+const authMessage = document.getElementById('authMessage');
+function showAuthMessage(message, isError = false) {
+  authMessage.textContent = message;
+  authMessage.classList.toggle('error', isError);
+}
+function applyAuthSession(session) {
+  const signedIn = Boolean(session?.user);
+  authGate.hidden = signedIn;
+  appShell.hidden = !signedIn;
+  document.getElementById('authSignOut').hidden = !signedIn;
+  if (signedIn) showAuthMessage('');
+}
+document.getElementById('authForm').addEventListener('submit', async event => {
+  event.preventDefault();
+  if (!authClient) {
+    showAuthMessage('Não foi possível iniciar a autenticação. Confira a conexão e a configuração do Supabase.', true);
+    return;
+  }
+  const button = document.getElementById('authSubmit');
+  button.disabled = true;
+  showAuthMessage('Enviando link…');
+  try {
+    const email = document.getElementById('authEmail').value.trim();
+    const emailRedirectTo = `${location.origin}${location.pathname}`;
+    const { error } = await authClient.auth.signInWithOtp({ email, options: { shouldCreateUser: false, emailRedirectTo } });
+    if (error) throw error;
+    showAuthMessage('Se este e-mail tiver uma conta autorizada, você receberá um link de acesso. Confira também o spam.');
+  } catch (error) {
+    showAuthMessage(error.message || 'Não foi possível enviar o link. Confira as configurações de autenticação.', true);
+  } finally {
+    button.disabled = false;
+  }
+});
+document.getElementById('authSignOut').addEventListener('click', async () => {
+  if (!authClient) return;
+  const { error } = await authClient.auth.signOut();
+  if (error) showToast('Não foi possível sair da conta.');
+});
+if (authClient) {
+  authClient.auth.onAuthStateChange((_event, session) => applyAuthSession(session));
+  authClient.auth.getSession().then(({ data, error }) => {
+    if (error) showAuthMessage('Não foi possível verificar a sessão. Atualize a página e tente novamente.', true);
+    applyAuthSession(data?.session || null);
+  }).catch(() => {
+    showAuthMessage('Não foi possível verificar a sessão. Atualize a página e tente novamente.', true);
+    applyAuthSession(null);
+  });
+} else {
+  applyAuthSession(null);
+  showAuthMessage('A configuração do Supabase não carregou. Atualize a página ou verifique a conexão.', true);
+}
+
 renderAll();
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   navigator.serviceWorker.register('./service-worker.js').catch(() => {});
 }
+
