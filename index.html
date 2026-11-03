@@ -82,6 +82,7 @@
       <section class="page" id="page-calculadoras">
         <div class="page-heading"><div><p class="eyebrow">CÁLCULO COM VALORES INFORMADOS POR VOCÊ</p><h1>Calculadoras</h1><p class="muted">Ferramentas aritméticas. Elas não escolhem medicamento nem recomendam dose.</p></div></div>
         <div class="calculator-layout">
+          <div class="section-heading"><div><p class="eyebrow">OPERAÇÕES BÁSICAS</p><h2>Cálculos de dose e infusão</h2></div></div>
           <div class="calc-tabs" role="tablist" aria-label="Tipo de cálculo">
             <button class="calc-tab active" data-calc="peso">Dose por peso</button>
             <button class="calc-tab" data-calc="volume">Dose para volume</button>
@@ -117,6 +118,12 @@
             <button class="button primary" id="calculateInfusion">Calcular velocidade</button>
             <div class="result-box hidden" id="infusionResult" aria-live="polite"></div>
           </article>
+          <section class="calculator-catalog" aria-labelledby="catalogTitle">
+            <div class="section-heading catalog-heading"><div><p class="eyebrow">CATÁLOGO DAS CALCULADORAS</p><h2 id="catalogTitle">Escolha uma categoria</h2><p class="muted">O PDF lista 99 calculadoras em 9 áreas. Cada fórmula será implementada com fonte e limites clínicos próprios antes de liberar resultados.</p></div></div>
+            <label class="catalog-search-label" for="calculatorSearch">Buscar calculadora<input id="calculatorSearch" type="search" placeholder="Ex.: hiponatremia, Glasgow, Holliday-Segar"></label>
+            <div id="calculatorCategories" class="calculator-categories" role="tablist" aria-label="Categorias de calculadoras"></div>
+            <div id="calculatorCatalog" class="calculator-catalog-grid" role="list"></div>
+          </section>
           <p class="clinical-footnote"><b>Confira antes de usar:</b> unidade, peso, dose prescrita, concentração, limite máximo e via de administração na fonte profissional vigente. O resultado é apenas uma operação matemática.</p>
         </div>
       </section>
@@ -156,6 +163,8 @@
   <dialog id="protocolDialog" class="modal"><form method="dialog" id="protocolForm"><div class="modal-heading"><div><p class="eyebrow">REFERÊNCIA PESSOAL</p><h2>Salvar protocolo</h2></div><button type="button" class="icon-button" data-close="protocolDialog" aria-label="Fechar">×</button></div><label>Título<input id="protocolTitle" required placeholder="Nome do protocolo"></label><label>Fonte / instituição<input id="protocolSource" placeholder="Ex.: Ministério da Saúde, sociedade médica"></label><label>Link do documento<input id="protocolUrl" type="url" placeholder="https://"></label><label>Data de revisão<input id="protocolReviewed" type="date"></label><label>Anexar PDFs ou imagens<input id="protocolFiles" type="file" accept="application/pdf,image/jpeg,image/png,image/webp,image/gif" multiple></label><p class="form-hint">PDF, JPG, PNG, WebP ou GIF de até 20 MB por arquivo. Com sua conta conectada, os anexos são enviados ao armazenamento privado. Confira a versão e a vigência da fonte antes de usar.</p><div class="modal-actions"><button type="button" class="button secondary" data-close="protocolDialog">Cancelar</button><button class="button primary" type="submit">Salvar protocolo</button></div></form></dialog>
 
   <dialog id="localImportDialog" class="modal"><div class="modal-heading"><div><p class="eyebrow">PRIMEIRA SINCRONIZAÇÃO</p><h2>Dados encontrados neste aparelho</h2></div></div><p id="localImportSummary" class="muted"></p><p class="form-hint">Importar adiciona à sua conta apenas os registros que ainda não estão na nuvem. Em caso de conflito, a versão da nuvem será mantida. Os dados deste aparelho ficam preservados até a escolha.</p><div class="modal-actions"><button class="button secondary" id="useCloudData" type="button">Continuar com os dados da nuvem</button><button class="button primary" id="importLocalData" type="button">Importar registros locais</button></div></dialog>
+
+  <dialog id="calculatorDialog" class="modal calculator-dialog"><div class="modal-heading"><div><p class="eyebrow">CALCULADORA CLÍNICA</p><h2 id="dynamicCalculatorTitle"></h2></div><button type="button" class="icon-button" data-close="calculatorDialog" aria-label="Fechar">×</button></div><p id="dynamicCalculatorFormula" class="muted calculator-formula"></p><div id="dynamicCalculatorFields" class="dynamic-calculator-fields"></div><button class="button primary" id="calculateDynamicCalculator" type="button">Calcular</button><div id="dynamicCalculatorResult" class="result-box hidden" aria-live="polite"></div><a id="dynamicCalculatorSource" class="calculator-source" target="_blank" rel="noopener" hidden></a><p class="form-hint calculator-safety">Ferramenta de apoio. Confira unidades, indicação, protocolo institucional e dados do paciente antes de qualquer decisão clínica.</p></dialog>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
