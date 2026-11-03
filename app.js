@@ -5,6 +5,308 @@ const SYNC_META_KEY = 'meu-plantao:sync:v1';
 const LOCAL_BACKUP_KEY = 'meu-plantao:pre-sync-backup:v1';
 const STORAGE_BUCKET = 'protocol-attachments';
 const SUPPORTED_ATTACHMENT_TYPES = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+const CALCULATOR_CATALOG = {
+  'Hidroeletrolítico': 'Hidratação Venosa|Ânion Gap|Osmolaridade Plasmática|Potássio Corrigido pelo pH|Sódio Corrigido — Hiperglicemia|Cálcio Corrigido — Albumina|Hipernatremia|Hiponatremia|Hipocalemia|SRO|Holliday-Segar|Reposição de Bicarbonato',
+  'UTI / Emergência': 'Emergência Pediátrica|Equivalência de Corticoides|PRISM Original|PRISM III CPCCRN 4h|PRISM IV|PIM 2|PIM 3|PELOD-2|pSOFA|Phoenix Sepsis Score|VIS|OI / OSI|PASS|Pediatric Trauma Score|SIPA|Triagem SIRS pediátrica|Queimaduras — Lund & Browder|Infusão contínua|Vasopressores',
+  'Neonatologia': 'Classificação do RN|Reanimação Neonatal|Crescimento do Prematuro INTERGROWTH-21st|Icterícia Neonatal|Nomograma de Bhutani|Score de Rodwell|Capurro Somático|Capurro Somatoneurológico|Escala de Apgar|Idade Corrigida do Prematuro|Escala de Finnegan|Escala de Ballard|Escore de Downes|FiO₂ em baixo fluxo|New Ballard Score|SNAPPE-II|CRIB-II|nSOFA|Silverman-Andersen',
+  'Procedimentos': 'Dispositivos Pediátricos|Gotejamento|Tubo IOT Pediátrico',
+  'Antropometria': 'IG por Ultrassonografia|IG pela DUM|Crescimento OMS|Circunferência Braquial OMS|Acondroplasia CLARITY|Síndrome de Down Zemel/CDC|Turner Brasil|Prega Tricipital OMS|Prega Subescapular OMS|Velocidade de Peso OMS|Velocidade de Perímetro Cefálico OMS|Velocidade de Comprimento OMS|Perímetro Cefálico|IMC e Superfície Corporal|Estatura Alvo',
+  'Clínicas': 'Pressão Arterial Pediátrica|Fração de Excreção de Ureia|Fração de Excreção de Sódio|Sinais Vitais Pediátricos|Critérios de Roma IV',
+  'Nefrologia': 'Clearance de Creatinina — Bedside Schwartz|Clearance de Creatinina — Schwartz|IRA KDIGO Pediátrico',
+  'Escores': 'Escore de Raimondi|Escala RASS|Glasgow Pediátrico|FLACC|Escore de Westley|Wood-Downes|Wood-Downes-Ferrés|PECARN — TCE|PEWS|Escala de Faces Wong-Baker|GINA — Controle de Asma|PAS|Centor e McIsaac',
+  'Nutrição': 'GEB WHO/FAO/UNU|GEB Harris-Benedict|GEB Schofield|Energia Holliday-Segar|GEB Mifflin-St Jeor|Energia DRI/NASEM|Energia FAO/WHO/UNU|Calorimetria Indireta|Energia em Nutrição Parenteral Pediátrica|Manejo da Desnutrição Aguda',
+};
+const CALCULATOR_CATEGORIES = Object.keys(CALCULATOR_CATALOG);
+const READY_CALCULATOR_CATEGORIES = new Set(['Hidroeletrolítico']);
+const CALCULATOR_IMPLEMENTATIONS = {
+  'hidratacao-venosa': {
+    title: 'Hidratação Venosa', category: 'Hidroeletrolítico',
+    fields: [
+      { id: 'weight', label: 'Peso', unit: 'kg' }, { id: 'fluidRate', label: 'Volume hídrico prescrito', unit: 'mL/kg/dia' }, { id: 'tig', label: 'TIG prescrita', unit: 'mg/kg/min' },
+      { id: 'naDose', label: 'Sódio prescrito', unit: 'mEq/kg/dia', optional: true }, { id: 'naConc', label: 'Concentração do estoque de sódio', unit: 'mEq/mL', optional: true },
+      { id: 'kDose', label: 'Potássio prescrito', unit: 'mEq/kg/dia', optional: true }, { id: 'kConc', label: 'Concentração do estoque de potássio', unit: 'mEq/mL', optional: true },
+      { id: 'caDose', label: 'Cálcio prescrito', unit: 'mg/kg/dia', optional: true }, { id: 'caConc', label: 'Concentração do estoque de cálcio', unit: 'mg/mL', optional: true },
+      { id: 'mgDose', label: 'Magnésio prescrito', unit: 'mEq/kg/dia', optional: true }, { id: 'mgConc', label: 'Concentração do estoque de magnésio', unit: 'mEq/mL', optional: true },
+    ],
+    formula: 'Calcula volume diário, glicose necessária para a TIG informada e volumes de eletrólitos somente quando você preencher a prescrição e a concentração do produto. Não sugere doses nem composição da solução.',
+    source: { label: 'NICE — fluidoterapia IV em crianças', url: 'https://www.nice.org.uk/guidance/ng29/chapter/recommendations' },
+    calculate: v => {
+      const volume = v.weight * v.fluidRate;
+      const glucoseG = v.tig * v.weight * 1.44;
+      const lines = [`Volume total calculado: ${number.format(volume)} mL/dia (${number.format(volume / 24)} mL/h).`, `Glicose para a TIG informada: ${number.format(glucoseG)} g/dia; concentração equivalente aproximada: ${number.format(glucoseG * 100 / volume)}% m/v.`];
+      for (const [name, dose, conc, unit] of [['Sódio', v.naDose, v.naConc, 'mL'], ['Potássio', v.kDose, v.kConc, 'mL'], ['Cálcio', v.caDose, v.caConc, 'mL'], ['Magnésio', v.mgDose, v.mgConc, 'mL']]) {
+        if ((dose == null) !== (conc == null)) throw new Error(`Preencha dose e concentração do estoque de ${name.toLowerCase()}, ou deixe ambos vazios.`);
+        if (dose != null) {
+          const amount = dose * v.weight;
+          lines.push(`${name}: ${number.format(amount)} ${name === 'Cálcio' ? 'mg' : 'mEq'}/dia; volume do estoque: ${number.format(amount / conc)} ${unit}/dia.`);
+        }
+      }
+      return { lines, warning: 'Confirme indicação, compatibilidade, acesso, limites de concentração e velocidade com protocolo local. O volume dos aditivos deve ser considerado no volume final conforme a prescrição.' };
+    },
+  },
+  'anion-gap': {
+    title: 'Ânion Gap', category: 'Hidroeletrolítico',
+    fields: [{ id: 'na', label: 'Sódio', unit: 'mEq/L' }, { id: 'cl', label: 'Cloreto', unit: 'mEq/L' }, { id: 'hco3', label: 'Bicarbonato', unit: 'mEq/L' }],
+    formula: 'Ânion gap = Na − (Cl + HCO₃). Não inclui potássio.',
+    source: { label: 'ISPAD — cetoacidose diabética pediátrica', url: 'https://www.ispad.org/static/6dd62eae-c8cb-4b4a-84e1efc768505746/Ch11PediatricDiabetes.pdf' },
+    calculate: v => ({ lines: [`Ânion gap calculado: ${number.format(v.na - v.cl - v.hco3)} mEq/L.`], warning: 'A interpretação depende do método laboratorial, albumina e contexto clínico; não classifica a causa isoladamente.' }),
+  },
+  'osmolaridade-plasmatica': {
+    title: 'Osmolaridade Plasmática', category: 'Hidroeletrolítico',
+    fields: [{ id: 'na', label: 'Sódio', unit: 'mEq/L' }, { id: 'glucose', label: 'Glicose', unit: 'mg/dL' }, { id: 'bun', label: 'Nitrogênio ureico (BUN)', unit: 'mg/dL', optional: true }],
+    formula: 'Estimativa: 2 × Na + glicose/18 + BUN/2,8. Se deixar BUN vazio, o resultado é a osmolaridade efetiva estimada.',
+    source: { label: 'ISPAD — cetoacidose diabética pediátrica', url: 'https://www.ispad.org/static/6dd62eae-c8cb-4b4a-84e1efc768505746/Ch11PediatricDiabetes.pdf' },
+    calculate: v => ({ lines: [`Osmolaridade calculada: ${number.format(2 * v.na + v.glucose / 18 + (v.bun || 0) / 2.8)} mOsm/kg.`], warning: 'É uma estimativa calculada, não substitui osmolaridade medida. A fórmula exige glicose e BUN em mg/dL.' }),
+  },
+  'potassio-corrigido-pelo-ph': {
+    title: 'Potássio Corrigido pelo pH', category: 'Hidroeletrolítico',
+    fields: [{ id: 'potassium', label: 'Potássio medido', unit: 'mEq/L' }, { id: 'pH', label: 'pH medido', unit: 'pH' }, { id: 'targetPH', label: 'pH de referência definido pelo profissional', unit: 'pH' }, { id: 'coefficient', label: 'Coeficiente assinado da fórmula adotada localmente', unit: 'mEq/L por unidade de pH', allowNegative: true }],
+    formula: 'A relação entre pH e potássio varia com o método e o contexto; por isso, o app não fixa um coeficiente. Informe o coeficiente com o sinal indicado pela fórmula aprovada pelo seu serviço.',
+    calculate: v => ({ lines: [`Potássio estimado pela relação informada: ${number.format(v.potassium + v.coefficient * (v.targetPH - v.pH))} mEq/L.`], warning: 'Estimativa dependente do coeficiente inserido. Não use para substituir nova dosagem laboratorial.' }),
+  },
+  'sodio-corrigido-hiperglicemia': {
+    title: 'Sódio Corrigido — Hiperglicemia', category: 'Hidroeletrolítico',
+    fields: [{ id: 'na', label: 'Sódio medido', unit: 'mEq/L' }, { id: 'glucose', label: 'Glicose', unit: 'mg/dL' }],
+    formula: 'Estimativa exibida: Na medido + 0,016 × (glicose − 100), com glicose em mg/dL.',
+    source: { label: 'ISPAD — cetoacidose diabética pediátrica', url: 'https://www.ispad.org/static/6dd62eae-c8cb-4b4a-84e1efc768505746/Ch11PediatricDiabetes.pdf' },
+    calculate: v => ({ lines: [`Sódio corrigido estimado: ${number.format(v.na + 0.016 * (v.glucose - 100))} mEq/L.`], warning: 'A fórmula de correção varia entre referências. Avalie tendência seriada e protocolo vigente; este valor isolado não orienta reposição.' }),
+  },
+  'calcio-corrigido-albumina': {
+    title: 'Cálcio Corrigido — Albumina', category: 'Hidroeletrolítico',
+    fields: [{ id: 'calcium', label: 'Cálcio total', unit: 'mg/dL' }, { id: 'albumin', label: 'Albumina', unit: 'g/dL' }],
+    formula: 'Estimativa: cálcio total + 0,8 × (4 − albumina). Unidades exigidas: mg/dL e g/dL.',
+    source: { label: 'Endotext — abordagem do cálcio', url: 'https://www.ncbi.nlm.nih.gov/books/NBK279129/' },
+    calculate: v => ({ lines: [`Cálcio corrigido estimado: ${number.format(v.calcium + 0.8 * (4 - v.albumin))} mg/dL.`], warning: 'A correção por albumina pode ser imprecisa, especialmente em pacientes críticos. Considere cálcio ionizado conforme o contexto.' }),
+  },
+  'hipernatremia': {
+    title: 'Hipernatremia — Déficit de Água Livre', category: 'Hidroeletrolítico',
+    fields: [{ id: 'weight', label: 'Peso atual', unit: 'kg' }, { id: 'na', label: 'Sódio medido', unit: 'mEq/L' }, { id: 'targetNa', label: 'Sódio-alvo definido pelo profissional', unit: 'mEq/L' }, { id: 'tbw', label: 'Fração de água corporal total (0–1)', unit: 'L/kg' }],
+    formula: 'Déficit estimado = peso × fração de água corporal × (Na medido/Na-alvo − 1). A fração precisa ser selecionada conforme idade e condição clínica.',
+    source: { label: 'Arkansas Children’s — distúrbios do sódio pediátricos', url: 'https://www.archildrens.org/-/media/Files/for-healthcare-professionals/pediatric-guidelines/Pediatric_Sodium_Disorders.pdf' },
+    calculate: v => {
+      if (v.na <= v.targetNa) throw new Error('Para estimar déficit de água livre, o sódio medido precisa ser maior que o alvo informado.');
+      return { lines: [`Déficit de água livre estimado: ${number.format(v.weight * v.tbw * (v.na / v.targetNa - 1) * 1000)} mL.`], warning: 'Estimativa teórica; não inclui manutenção nem perdas em curso. A velocidade de correção requer plano clínico e monitorização seriada.' };
+    },
+  },
+  'hiponatremia': {
+    title: 'Hiponatremia — Déficit de Sódio', category: 'Hidroeletrolítico',
+    fields: [{ id: 'weight', label: 'Peso', unit: 'kg' }, { id: 'na', label: 'Sódio medido', unit: 'mEq/L' }, { id: 'targetNa', label: 'Sódio-alvo definido pelo profissional', unit: 'mEq/L' }, { id: 'tbw', label: 'Fração de água corporal total (0–1)', unit: 'L/kg' }],
+    formula: 'Estimativa matemática: (Na-alvo − Na medido) × peso × fração de água corporal. O alvo e a fração devem vir do plano clínico.',
+    source: { label: 'Arkansas Children’s — distúrbios do sódio pediátricos', url: 'https://www.archildrens.org/-/media/Files/for-healthcare-professionals/pediatric-guidelines/Pediatric_Sodium_Disorders.pdf' },
+    calculate: v => {
+      if (v.targetNa <= v.na) throw new Error('O sódio-alvo informado deve ser maior que o sódio medido.');
+      return { lines: [`Diferença matemática estimada: ${number.format((v.targetNa - v.na) * v.weight * v.tbw)} mEq de sódio.`], warning: 'Não converte automaticamente em volume de solução e não define correção segura. Considere sintomas, cronicidade, perdas e protocolo institucional.' };
+    },
+  },
+  'hipocalemia': {
+    title: 'Hipocalemia — Reposição de KCl', category: 'Hidroeletrolítico',
+    fields: [{ id: 'weight', label: 'Peso', unit: 'kg' }, { id: 'dose', label: 'Dose prescrita', unit: 'mEq/kg' }, { id: 'concentration', label: 'Concentração da apresentação', unit: 'mEq/mL' }],
+    formula: 'Converte apenas a dose prescrita: mEq totais = dose × peso; volume = mEq totais/concentração. Não sugere dose, diluição ou velocidade.',
+    calculate: v => ({ lines: [`Quantidade prescrita: ${number.format(v.weight * v.dose)} mEq.`, `Volume correspondente à concentração informada: ${number.format(v.weight * v.dose / v.concentration)} mL.`], warning: 'Confirme concentração, via, diluição, velocidade, função renal e monitorização no protocolo institucional. Nunca administrar KCl concentrado sem diluição apropriada.' }),
+  },
+  'sro': {
+    title: 'SRO — Volume prescrito por peso', category: 'Hidroeletrolítico',
+    fields: [{ id: 'weight', label: 'Peso', unit: 'kg' }, { id: 'volumeKg', label: 'Volume prescrito no plano selecionado', unit: 'mL/kg' }],
+    formula: 'Volume calculado = peso × volume em mL/kg definido pelo profissional conforme plano de reidratação.',
+    source: { label: 'Ministério da Saúde — doenças diarreicas agudas', url: 'https://www.gov.br/saude/pt-br/assuntos/saude-de-a-a-z/d/dda/' },
+    calculate: v => ({ lines: [`Volume correspondente à prescrição informada: ${number.format(v.weight * v.volumeKg)} mL.`], warning: 'A calculadora não classifica desidratação nem escolhe plano. Reavalie a criança e siga o protocolo local.' }),
+  },
+  'holliday-segar': {
+    title: 'Holliday-Segar — Manutenção', category: 'Hidroeletrolítico',
+    fields: [{ id: 'weight', label: 'Peso', unit: 'kg' }],
+    formula: 'Estimativa diária: 100 mL/kg para os primeiros 10 kg + 50 mL/kg para os próximos 10 kg + 20 mL/kg para cada kg acima de 20.',
+    source: { label: 'NICE — fluidoterapia IV em crianças', url: 'https://www.nice.org.uk/guidance/ng29/chapter/recommendations' },
+    calculate: v => {
+      const daily = Math.min(v.weight, 10) * 100 + Math.max(0, Math.min(v.weight - 10, 10)) * 50 + Math.max(0, v.weight - 20) * 20;
+      return { lines: [`Volume de manutenção estimado: ${number.format(daily)} mL/dia.`, `Média horária aritmética: ${number.format(daily / 24)} mL/h.`], warning: 'Necessidade de manutenção não equivale à prescrição final. Considere idade, doença, perdas, balanço, tonicidade e restrições.' };
+    },
+  },
+  'reposicao-de-bicarbonato': {
+    title: 'Reposição de Bicarbonato', category: 'Hidroeletrolítico',
+    fields: [{ id: 'weight', label: 'Peso', unit: 'kg' }, { id: 'current', label: 'Bicarbonato medido', unit: 'mEq/L' }, { id: 'target', label: 'Alvo definido pelo profissional', unit: 'mEq/L' }, { id: 'factor', label: 'Fator de distribuição adotado no protocolo', unit: 'L/kg' }],
+    formula: 'Estimativa aritmética = peso × fator informado × (bicarbonato-alvo − bicarbonato medido). O fator não é pré-preenchido.',
+    calculate: v => {
+      if (v.target <= v.current) throw new Error('O alvo informado precisa ser maior que o bicarbonato medido.');
+      return { lines: [`Diferença estimada pelo fator informado: ${number.format(v.weight * v.factor * (v.target - v.current))} mEq.`], warning: 'Não recomenda bicarbonato nem substitui a avaliação da causa. O uso depende de indicação e protocolo, com monitorização.' };
+    },
+  },
+  'gotejamento': {
+    title: 'Gotejamento', category: 'Procedimentos',
+    fields: [{ id: 'volume', label: 'Volume', unit: 'mL' }, { id: 'time', label: 'Tempo de infusão', unit: 'horas' }, { id: 'dropFactor', label: 'Fator do equipo informado pelo fabricante', unit: 'gotas/mL' }],
+    formula: 'mL/h = volume/tempo. gotas/min = volume × fator do equipo/(tempo × 60).',
+    calculate: v => ({ lines: [`Velocidade: ${number.format(v.volume / v.time)} mL/h.`, `Gotejamento: ${number.format(v.volume * v.dropFactor / (v.time * 60))} gotas/min.`], warning: 'Confirme o fator impresso no equipo, a via e a programação da bomba conforme prescrição.' }),
+  },
+  'imc-e-superficie-corporal': {
+    title: 'IMC e Superfície Corporal', category: 'Antropometria',
+    fields: [{ id: 'weight', label: 'Peso', unit: 'kg' }, { id: 'height', label: 'Estatura', unit: 'cm' }],
+    formula: 'IMC = peso/estatura². Superfície corporal estimada por Haycock, Mosteller e Du Bois.',
+    source: { label: 'Haycock et al. — superfície corporal em crianças', url: 'https://pubmed.ncbi.nlm.nih.gov/650346/' },
+    calculate: v => {
+      const heightM = v.height / 100;
+      const bmi = v.weight / (heightM * heightM);
+      const haycock = 0.024265 * (v.height ** 0.3964) * (v.weight ** 0.5378);
+      const mosteller = Math.sqrt(v.height * v.weight / 3600);
+      const dubois = 0.007184 * (v.height ** 0.725) * (v.weight ** 0.425);
+      return { lines: [`IMC: ${number.format(bmi)} kg/m².`, `Superfície corporal — Haycock: ${number.format(haycock)} m².`, `Superfície corporal — Mosteller: ${number.format(mosteller)} m².`, `Superfície corporal — Du Bois: ${number.format(dubois)} m².`], warning: 'Em crianças, o IMC deve ser interpretado por idade e sexo em curvas de crescimento. O valor isolado não classifica estado nutricional.' };
+    },
+  },
+  'clearance-de-creatinina-bedside-schwartz': {
+    title: 'Clearance de Creatinina — Bedside Schwartz', category: 'Nefrologia',
+    fields: [{ id: 'height', label: 'Estatura', unit: 'cm' }, { id: 'creatinine', label: 'Creatinina sérica', unit: 'mg/dL' }],
+    formula: 'eTFG = 0,413 × estatura (cm)/creatinina sérica (mg/dL), para crianças, com creatinina padronizada IDMS.',
+    source: { label: 'NIDDK — equações pediátricas de eTFG', url: 'https://www.niddk.nih.gov/research-funding/research-programs/kidney-clinical-research-epidemiology/laboratory/glomerular-filtration-rate-equations/children-adolescents-young-adults' },
+    calculate: v => ({ lines: [`eTFG estimada: ${number.format(0.413 * v.height / v.creatinine)} mL/min/1,73 m².`], warning: 'Equação para uso pediátrico e creatinina padronizada. Não é clearance medido; confirme a aplicabilidade clínica e o método laboratorial.' }),
+  },
+  'clearance-de-creatinina-schwartz': {
+    title: 'Clearance de Creatinina — Schwartz', category: 'Nefrologia',
+    fields: [{ id: 'height', label: 'Estatura', unit: 'cm' }, { id: 'creatinine', label: 'Creatinina sérica', unit: 'mg/dL' }, { id: 'k', label: 'Constante k da faixa etária/sexo', unit: 'valor da fórmula' }],
+    formula: 'eTFG estimada = k × estatura (cm)/creatinina sérica (mg/dL). Escolha k conforme a fórmula de Schwartz adotada e o método de creatinina.',
+    source: { label: 'Schwartz et al. — estimativa de TFG em crianças', url: 'https://pubmed.ncbi.nlm.nih.gov/3588043/' },
+    calculate: v => ({ lines: [`eTFG estimada: ${number.format(v.k * v.height / v.creatinine)} mL/min/1,73 m².`], warning: 'O k varia com idade, sexo, prematuridade e método laboratorial. Não use sem confirmar qual versão da equação é adequada.' }),
+  },
+  'ira-kdigo-pediatrico': {
+    title: 'IRA KDIGO Pediátrico', category: 'Nefrologia',
+    fields: [{ id: 'baseline', label: 'Creatinina basal', unit: 'mg/dL' }, { id: 'current', label: 'Creatinina atual', unit: 'mg/dL' }, { id: 'creatinineHours', label: 'Horas entre creatinina basal e atual', unit: 'h' }, { id: 'urineRate', label: 'Diurese média no período', unit: 'mL/kg/h', optional: true, allowZero: true }, { id: 'urineHours', label: 'Duração da diurese informada', unit: 'h', optional: true }],
+    formula: 'Estadiamento por creatinina e débito urinário conforme critérios KDIGO. Preencha a diurese e duração juntas; deixe ambas vazias se indisponíveis.',
+    source: { label: 'KDIGO — diretriz de lesão renal aguda', url: 'https://kdigo.org/wp-content/uploads/2016/10/KDIGO-2012-AKI-Guideline-English.pdf' },
+    calculate: v => {
+      if ((v.urineRate == null) !== (v.urineHours == null)) throw new Error('Preencha diurese e duração juntas ou deixe ambos vazios.');
+      const ratio = v.current / v.baseline;
+      let stage = 0;
+      if (v.creatinineHours <= 168 && (ratio >= 3 || (v.current >= 4 && v.current > v.baseline))) stage = 3;
+      else if (v.creatinineHours <= 168 && ratio >= 2) stage = 2;
+      else if ((v.creatinineHours <= 168 && ratio >= 1.5) || (v.creatinineHours <= 48 && v.current - v.baseline >= 0.3)) stage = 1;
+      if (v.urineRate != null) {
+        if ((v.urineRate === 0 && v.urineHours >= 12) || (v.urineRate < 0.3 && v.urineHours >= 24)) stage = Math.max(stage, 3);
+        else if (v.urineRate < 0.5 && v.urineHours >= 12) stage = Math.max(stage, 2);
+        else if (v.urineRate < 0.5 && v.urineHours >= 6) stage = Math.max(stage, 1);
+      }
+      return { lines: [stage ? `Critério numérico compatível com estágio ${stage}.` : 'Os valores informados não alcançam os limiares numéricos de estágio 1–3.'], warning: 'Não substitui avaliação clínica. A aplicação pediátrica requer contexto, tendência temporal, diurese medida e atenção a neonatos; KDIGO também considera critérios adicionais.' };
+    },
+  },
+  'fracao-de-excrecao-de-sodio': {
+    title: 'Fração de Excreção de Sódio', category: 'Clínicas',
+    fields: [{ id: 'urineNa', label: 'Sódio urinário', unit: 'mesma unidade do sódio sérico' }, { id: 'serumNa', label: 'Sódio sérico', unit: 'mesma unidade do sódio urinário' }, { id: 'urineCr', label: 'Creatinina urinária', unit: 'mesma unidade da creatinina sérica' }, { id: 'serumCr', label: 'Creatinina sérica', unit: 'mesma unidade da creatinina urinária' }],
+    formula: 'FENa (%) = (Na urinário × creatinina sérica)/(Na sérico × creatinina urinária) × 100. Use amostras pareadas e unidades compatíveis.',
+    source: { label: 'OPAS — calculadora FENa', url: 'https://recursos.opas.org.br/en/tools/fena-calculator' },
+    calculate: v => ({ lines: [`FENa estimada: ${number.format((v.urineNa * v.serumCr / (v.serumNa * v.urineCr)) * 100)}%.`], warning: 'Interpretação limitada por diuréticos, doença renal e contexto clínico; não distingue etiologia isoladamente.' }),
+  },
+  'fracao-de-excrecao-de-ureia': {
+    title: 'Fração de Excreção de Ureia', category: 'Clínicas',
+    fields: [{ id: 'urineUrea', label: 'Ureia urinária', unit: 'mesma unidade da ureia sérica' }, { id: 'serumUrea', label: 'Ureia sérica', unit: 'mesma unidade da ureia urinária' }, { id: 'urineCr', label: 'Creatinina urinária', unit: 'mesma unidade da creatinina sérica' }, { id: 'serumCr', label: 'Creatinina sérica', unit: 'mesma unidade da creatinina urinária' }],
+    formula: 'FEUreia (%) = (ureia urinária × creatinina sérica)/(ureia sérica × creatinina urinária) × 100. Use amostras pareadas e unidades compatíveis.',
+    source: { label: 'AACC — investigação laboratorial da lesão renal aguda', url: 'https://academic.oup.com/jalm/article/6/5/1316/6272705' },
+    calculate: v => ({ lines: [`FEUreia estimada: ${number.format((v.urineUrea * v.serumCr / (v.serumUrea * v.urineCr)) * 100)}%.`], warning: 'O desempenho diagnóstico varia; interpretação depende do contexto, diuréticos, doença renal e outras causas de alteração da ureia.' }),
+  },
+  'energia-holliday-segar': {
+    title: 'Energia Holliday-Segar', category: 'Nutrição',
+    fields: [{ id: 'weight', label: 'Peso', unit: 'kg' }],
+    formula: 'Estimativa clássica de gasto calórico diário: 100 kcal/kg para os primeiros 10 kg + 50 kcal/kg para os próximos 10 kg + 20 kcal/kg acima de 20 kg.',
+    source: { label: 'Holliday & Segar — necessidade de água de manutenção', url: 'https://publications.aap.org/pediatrics/article/19/5/823/29135/THE-MAINTENANCE-NEED-FOR-WATER-IN-PARENTERAL-FLUID' },
+    calculate: v => {
+      const kcal = Math.min(v.weight, 10) * 100 + Math.max(0, Math.min(v.weight - 10, 10)) * 50 + Math.max(0, v.weight - 20) * 20;
+      return { lines: [`Estimativa pelo método: ${number.format(kcal)} kcal/dia.`], warning: 'Estimativa clássica de manutenção, não é meta nutricional individual nem substitui avaliação do gasto energético e do estado clínico.' };
+    },
+  },
+  'calorimetria-indireta': {
+    title: 'Calorimetria Indireta', category: 'Nutrição',
+    fields: [{ id: 'vo2', label: 'Consumo de oxigênio (VO₂)', unit: 'mL/min' }, { id: 'vco2', label: 'Produção de dióxido de carbono (VCO₂)', unit: 'mL/min' }],
+    formula: 'Equação simplificada de Weir: gasto energético = [3,941 × VO₂ (L/min) + 1,106 × VCO₂ (L/min)] × 1.440 min/dia.',
+    source: { label: 'Weir — método de cálculo da taxa metabólica', url: 'https://pmc.ncbi.nlm.nih.gov/articles/PMC1392602/' },
+    calculate: v => ({ lines: [`Gasto energético estimado: ${number.format((3.941 * v.vo2 / 1000 + 1.106 * v.vco2 / 1000) * 1440)} kcal/dia.`], warning: 'Versão simplificada sem correção por nitrogênio urinário. Verifique unidades, estabilidade da medida e limitações do método.' }),
+  },
+  'ig-pela-dum': {
+    title: 'IG pela DUM', category: 'Antropometria',
+    fields: [{ id: 'lmp', label: 'Primeiro dia da última menstruação', unit: 'data', type: 'date' }],
+    formula: 'Calcula idade gestacional pela diferença entre a DUM informada e a data de hoje; estima a DPP como DUM + 280 dias.',
+    source: { label: 'ACOG — métodos para estimar a data provável do parto', url: 'https://www.acog.org/clinical/clinical-guidance/committee-opinion/articles/2017/05/methods-for-estimating-the-due-date' },
+    calculate: v => {
+      const start = new Date(`${v.lmp}T00:00:00`);
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      const days = Math.floor((today - start) / 86400000);
+      if (days < 0) throw new Error('A DUM não pode estar no futuro.');
+      const due = new Date(start); due.setDate(due.getDate() + 280);
+      return { lines: [`Idade gestacional estimada: ${Math.floor(days / 7)} semanas e ${days % 7} dias.`, `DPP estimada pela DUM: ${new Intl.DateTimeFormat('pt-BR').format(due)}.`], warning: 'Estimativa de calendário. Ciclos irregulares e ultrassonografia podem alterar a datação obstétrica; use a melhor estimativa documentada.' };
+    },
+  },
+  'ig-por-ultrassonografia': {
+    title: 'IG por Ultrassonografia', category: 'Antropometria',
+    fields: [{ id: 'scanDate', label: 'Data do ultrassom', unit: 'data', type: 'date' }, { id: 'scanWeeks', label: 'Idade gestacional no ultrassom', unit: 'semanas' }, { id: 'scanDays', label: 'Dias adicionais', unit: 'dias', allowZero: true }],
+    formula: 'Projeta a idade gestacional informada no exame até hoje e calcula a DPP correspondente a 40 semanas.',
+    source: { label: 'ACOG — métodos para estimar a data provável do parto', url: 'https://www.acog.org/clinical/clinical-guidance/committee-opinion/articles/2017/05/methods-for-estimating-the-due-date' },
+    calculate: v => {
+      if (v.scanDays >= 7) throw new Error('Informe os dias adicionais entre 0 e 6.');
+      const scan = new Date(`${v.scanDate}T00:00:00`);
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      const daysSinceScan = Math.floor((today - scan) / 86400000);
+      if (daysSinceScan < 0) throw new Error('A data do exame não pode estar no futuro.');
+      const gaDays = v.scanWeeks * 7 + v.scanDays + daysSinceScan;
+      const due = new Date(scan); due.setDate(due.getDate() + 280 - (v.scanWeeks * 7 + v.scanDays));
+      return { lines: [`Idade gestacional projetada: ${Math.floor(gaDays / 7)} semanas e ${gaDays % 7} dias.`, `DPP estimada pelo exame: ${new Intl.DateTimeFormat('pt-BR').format(due)}.`], warning: 'A precisão da datação depende da idade gestacional e da qualidade do exame. Use a melhor estimativa obstétrica documentada; não redatar automaticamente.' };
+    },
+  },
+  'escala-de-apgar': {
+    title: 'Escala de Apgar', category: 'Neonatologia',
+    fields: [...['Aparência', 'Pulso', 'Reflexos', 'Tônus', 'Respiração'].map((label, index) => ({ id: `item${index}`, label, unit: 'pontos', type: 'select', allowZero: true, options: [{ value: 0, label: '0' }, { value: 1, label: '1' }, { value: 2, label: '2' }] })), { id: 'minute', label: 'Minuto de avaliação', unit: 'min', type: 'select', options: [1, 5, 10, 15, 20].map(value => ({ value, label: String(value) })) }],
+    formula: 'Some os cinco componentes pontuados de 0 a 2. Registre separadamente o momento da avaliação (1, 5, 10, 15 ou 20 minutos).',
+    source: { label: 'ACOG/AAP — uso e significado do escore de Apgar', url: 'https://doi.org/10.1097/AOG.0000000000001108' },
+    calculate: v => ({ lines: [`Escore de Apgar aos ${v.minute} minutos: ${v.item0 + v.item1 + v.item2 + v.item3 + v.item4}/10.`], warning: 'Apgar não deve ser usado isoladamente para prever desfecho neurológico individual.' }),
+  },
+  'escala-rass': {
+    title: 'Escala RASS', category: 'Escores',
+    fields: [{ id: 'score', label: 'Pontuação observada', unit: '−5 a +4', type: 'select', allowNegative: true, allowZero: true, options: [-5, -4, -3, -2, -1, 0, 1, 2, 3, 4].map(value => ({ value, label: `${value > 0 ? '+' : ''}${value}` })) }],
+    formula: 'Registra o valor RASS selecionado após avaliação clínica estruturada. Esta tela soma ou transforma nenhum outro dado.',
+    source: { label: 'RASS — validação e confiabilidade em UTI', url: 'https://pubmed.ncbi.nlm.nih.gov/12421743/' },
+    calculate: v => ({ lines: [`RASS selecionado: ${v.score > 0 ? '+' : ''}${v.score}.`], warning: 'A validação original foi em adultos. Para crianças, use a escala e as orientações adotadas pela sua UTI pediátrica.' }),
+  },
+  'glasgow-pediatrico': {
+    title: 'Glasgow Pediátrico', category: 'Escores',
+    fields: [{ id: 'eye', label: 'Abertura ocular', unit: '1–4', type: 'select', options: [1, 2, 3, 4].map(value => ({ value, label: String(value) })) }, { id: 'verbal', label: 'Resposta verbal pediátrica', unit: '1–5', type: 'select', options: [1, 2, 3, 4, 5].map(value => ({ value, label: String(value) })) }, { id: 'motor', label: 'Resposta motora', unit: '1–6', type: 'select', options: [1, 2, 3, 4, 5, 6].map(value => ({ value, label: String(value) })) }],
+    formula: 'Pontuação total = abertura ocular + resposta verbal pediátrica + resposta motora. Selecione os componentes observados conforme idade e protocolo.',
+    source: { label: 'Royal Children’s Hospital — escala de Glasgow infantil', url: 'https://www.rch.org.au/clinicalguide/guideline_index/Altered_conscious_state/' },
+    calculate: v => ({ lines: [`Glasgow Pediátrico: ${v.eye + v.verbal + v.motor}/15 (E${v.eye} V${v.verbal} M${v.motor}).`], warning: 'Registre cada componente, horário e fatores que limitam a avaliação. Uma queda do escore exige avaliação clínica imediata.' }),
+  },
+  'flacc': {
+    title: 'FLACC', category: 'Escores',
+    fields: ['Face', 'Pernas', 'Atividade', 'Choro', 'Consolabilidade'].map((label, index) => ({ id: `item${index}`, label, unit: '0–2', type: 'select', allowZero: true, options: [0, 1, 2].map(value => ({ value, label: String(value) })) })),
+    formula: 'Some as cinco categorias observadas, cada uma pontuada de 0 a 2. Escore total de 0 a 10.',
+    source: { label: 'Merkel et al. — escala FLACC', url: 'https://pubmed.ncbi.nlm.nih.gov/9220806/' },
+    calculate: v => ({ lines: [`FLACC: ${v.item0 + v.item1 + v.item2 + v.item3 + v.item4}/10.`], warning: 'Instrumento comportamental para crianças que não conseguem autorrelatar a dor. Interprete com idade, condição e protocolo local.' }),
+  },
+  'escala-de-faces-wong-baker': {
+    title: 'Escala de Faces Wong-Baker', category: 'Escores',
+    fields: [{ id: 'score', label: 'Pontuação apontada pela criança', unit: '0, 2, 4, 6, 8 ou 10', type: 'select', allowZero: true, options: [0, 2, 4, 6, 8, 10].map(value => ({ value, label: String(value) })) }],
+    formula: 'Registra o valor correspondente à face escolhida pela própria criança; não escolha a face pela expressão observada no rosto.',
+    source: { label: 'Wong-Baker FACES Foundation', url: 'https://wongbakerfaces.org/home-2/' },
+    calculate: v => ({ lines: [`Pontuação registrada: ${v.score}/10.`], warning: 'Use a escala original sem alterar as faces e siga o protocolo institucional para seleção da ferramenta de dor.' }),
+  },
+  'oi-osi': {
+    title: 'OI / OSI', category: 'UTI / Emergência',
+    fields: [{ id: 'map', label: 'Pressão média de vias aéreas', unit: 'cmH₂O' }, { id: 'fio2', label: 'FiO₂ como fração (ex.: 0,40)', unit: '0–1' }, { id: 'pao2', label: 'PaO₂', unit: 'mmHg', optional: true }, { id: 'spo2', label: 'SpO₂', unit: '%', optional: true }],
+    formula: 'OI = MAP × FiO₂ × 100/PaO₂. OSI = MAP × FiO₂ × 100/SpO₂. Informe pelo menos PaO₂ ou SpO₂.',
+    source: { label: 'PALICC-2 — definição e estratificação de PARDS', url: 'https://pmc.ncbi.nlm.nih.gov/articles/9848214/' },
+    calculate: v => {
+      if (v.fio2 > 1 || v.fio2 <= 0) throw new Error('FiO₂ deve ser informada como fração entre 0 e 1.');
+      if (v.pao2 == null && v.spo2 == null) throw new Error('Informe PaO₂, SpO₂, ou ambos.');
+      if (v.spo2 != null && v.spo2 > 100) throw new Error('SpO₂ deve estar entre 0 e 100%.');
+      const lines = [];
+      if (v.pao2 != null) lines.push(`OI: ${number.format(v.map * v.fio2 * 100 / v.pao2)}.`);
+      if (v.spo2 != null) lines.push(`OSI: ${number.format(v.map * v.fio2 * 100 / v.spo2)}.`);
+      return { lines, warning: 'Para estratificação PALICC-2 com SpO₂, a medida deve estar em estado estável e ≤97%. Os índices isolados não estabelecem diagnóstico.' };
+    },
+  },
+  'sipa': {
+    title: 'SIPA', category: 'UTI / Emergência',
+    fields: [{ id: 'age', label: 'Idade', unit: 'anos' }, { id: 'hr', label: 'Frequência cardíaca', unit: 'bpm' }, { id: 'sbp', label: 'Pressão arterial sistólica', unit: 'mmHg' }],
+    formula: 'Índice de choque = frequência cardíaca/pressão sistólica. Limiares de referência usados em estudos de trauma: >1,22 (4–6 anos), >1,0 (7–12), >0,9 (13–16).',
+    source: { label: 'Acker et al. — SIPA e ativação de equipe de trauma', url: 'https://pubmed.ncbi.nlm.nih.gov/27814956/' },
+    calculate: v => {
+      const score = v.hr / v.sbp;
+      const cutoff = v.age >= 4 && v.age <= 6 ? 1.22 : v.age <= 12 && v.age >= 7 ? 1 : v.age <= 16 && v.age >= 13 ? 0.9 : null;
+      return { lines: [`SIPA calculado: ${number.format(score)}.`, cutoff == null ? 'Sem limiar etário configurado nesta tela.' : `Limiar de referência para a faixa etária: ${number.format(cutoff)}; resultado ${score > cutoff ? 'acima' : 'não acima'} do limiar.`], warning: 'Limiar derivado de estudos de trauma e não diagnóstico. A faixa configurada não cobre menores de 4 ou maiores de 16 anos; considere o contexto e protocolo local.' };
+    },
+  },
+};
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const number = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 });
 const monthFormat = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' });
@@ -112,6 +414,9 @@ let pendingRemoteState = null;
 let viewMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
 let selectedDate = todayKey();
 let toastTimer;
+let selectedCalculatorCategory = CALCULATOR_CATEGORIES[0];
+let calculatorSearch = '';
+let activeCalculator = null;
 
 function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
@@ -647,12 +952,79 @@ function renderProtocolList() {
     });
   }));
 }
-function renderAll() { renderHome(); renderShifts(); renderMedicationList(); renderProtocolList(); renderDoseMedicationOptions(); }
+function renderAll() { renderHome(); renderShifts(); renderMedicationList(); renderProtocolList(); renderDoseMedicationOptions(); renderCalculatorCatalog(); }
 function renderDoseMedicationOptions() {
   const select = document.getElementById('doseMedication');
   const current = select.value;
   select.innerHTML = '<option value="">Informar valores manualmente</option>' + state.medications.map(item => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join('');
   if (state.medications.some(item => item.id === current)) select.value = current;
+}
+function renderCalculatorCatalog() {
+  const categories = document.getElementById('calculatorCategories');
+  categories.innerHTML = CALCULATOR_CATEGORIES.map(category => {
+    const count = CALCULATOR_CATALOG[category].split('|').length;
+    const active = category === selectedCalculatorCategory;
+    return `<button class="calculator-category${active ? ' active' : ''}" type="button" role="tab" aria-selected="${active}" data-category="${escapeHtml(category)}">${escapeHtml(category)} <span>${count}</span></button>`;
+  }).join('');
+  categories.querySelectorAll('[data-category]').forEach(button => button.addEventListener('click', () => {
+    selectedCalculatorCategory = button.dataset.category;
+    renderCalculatorCatalog();
+  }));
+
+  const query = calculatorSearch.trim().toLocaleLowerCase('pt-BR');
+  const entries = CALCULATOR_CATEGORIES.flatMap(category => CALCULATOR_CATALOG[category].split('|').map(title => ({ title, category })))
+    .filter(item => (query ? `${item.title} ${item.category}`.toLocaleLowerCase('pt-BR').includes(query) : item.category === selectedCalculatorCategory));
+  document.getElementById('calculatorCatalog').innerHTML = entries.length
+    ? entries.map(item => {
+      const implementation = READY_CALCULATOR_CATEGORIES.has(item.category) ? CALCULATOR_IMPLEMENTATIONS[calculatorSlug(item.title)] : null;
+      const action = implementation ? `<button type="button" class="button secondary small" data-open-calculator="${escapeHtml(calculatorSlug(item.title))}">Abrir</button>` : '<span class="catalog-status">Em implementação</span>';
+      return `<article class="calculator-catalog-card${implementation ? ' calculator-ready' : ''}" role="listitem"><div><span class="catalog-category-label">${escapeHtml(item.category)}</span><h3>${escapeHtml(item.title)}</h3></div>${action}</article>`;
+    }).join('')
+    : '<p class="empty-state">Nenhuma calculadora encontrada.</p>';
+  document.getElementById('calculatorCatalog').querySelectorAll('[data-open-calculator]').forEach(button => button.addEventListener('click', () => openCalculator(button.dataset.openCalculator)));
+}
+function calculatorSlug(title) { return title.toLocaleLowerCase('pt-BR').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''); }
+function openCalculator(id) {
+  const calculator = CALCULATOR_IMPLEMENTATIONS[id];
+  if (!calculator) return;
+  activeCalculator = calculator;
+  document.getElementById('dynamicCalculatorTitle').textContent = calculator.title;
+  document.getElementById('dynamicCalculatorFormula').textContent = calculator.formula;
+  document.getElementById('dynamicCalculatorFields').innerHTML = calculator.fields.map(field => {
+    const input = field.options
+      ? `<select data-calculator-input="${escapeHtml(field.id)}"><option value="">Selecione</option>${field.options.map(option => `<option value="${escapeHtml(option.value)}">${escapeHtml(option.label)}</option>`).join('')}</select>`
+      : `<input type="${field.type || 'number'}" ${field.type === 'date' ? '' : 'step="any"'} data-calculator-input="${escapeHtml(field.id)}" ${field.optional ? '' : 'required'}>`;
+    return `<label>${escapeHtml(field.label)}${field.optional ? ' <span class="unit">opcional</span>' : ''}<span class="unit">${escapeHtml(field.unit)}</span>${input}</label>`;
+  }).join('');
+  const source = document.getElementById('dynamicCalculatorSource');
+  if (calculator.source) {
+    source.href = calculator.source.url;
+    source.textContent = `Fonte: ${calculator.source.label} ↗`;
+    source.hidden = false;
+  } else { source.hidden = true; }
+  document.getElementById('dynamicCalculatorResult').classList.add('hidden');
+  document.getElementById('dynamicCalculatorResult').replaceChildren();
+  document.getElementById('calculatorDialog').showModal();
+}
+function calculateActiveCalculator() {
+  if (!activeCalculator) return;
+  try {
+    const values = {};
+    for (const field of activeCalculator.fields) {
+      const raw = document.querySelector(`[data-calculator-input="${field.id}"]`).value;
+      if (raw === '' && field.optional) { values[field.id] = null; continue; }
+      const value = field.type === 'date' ? raw : Number(raw);
+      if (raw === '') throw new Error(`Preencha ${field.label.toLowerCase()}.`);
+      if (field.type !== 'date' && (!Number.isFinite(value) || (value < 0 && !field.allowNegative) || (value === 0 && !field.allowZero))) throw new Error(`Preencha ${field.label.toLowerCase()} com um valor válido${field.allowNegative ? ' entre os valores listados' : field.allowZero ? ' igual ou maior que zero' : ' maior que zero'}.`);
+      values[field.id] = value;
+    }
+    const result = activeCalculator.calculate(values);
+    const box = document.getElementById('dynamicCalculatorResult');
+    box.innerHTML = `<strong>Resultado</strong><ul>${result.lines.map(line => `<li>${escapeHtml(line)}</li>`).join('')}</ul>${result.warning ? `<small class="result-warning">${escapeHtml(result.warning)}</small>` : ''}`;
+    box.classList.remove('hidden');
+  } catch (error) {
+    showToast(error.message || 'Confira os valores informados.');
+  }
 }
 function openShift(date = selectedDate) {
   document.getElementById('shiftForm').reset();
@@ -732,6 +1104,11 @@ document.querySelectorAll('.calc-tab').forEach(button => button.addEventListener
   document.querySelectorAll('.calc-tab').forEach(tab => tab.classList.toggle('active', tab === button));
   document.querySelectorAll('.calc-panel').forEach(panel => panel.classList.toggle('hidden', panel.id !== `calc-${button.dataset.calc}`));
 }));
+document.getElementById('calculatorSearch').addEventListener('input', event => {
+  calculatorSearch = event.target.value;
+  renderCalculatorCatalog();
+});
+document.getElementById('calculateDynamicCalculator').addEventListener('click', calculateActiveCalculator);
 document.getElementById('calculateDose').addEventListener('click', () => {
   const weight = Number(document.getElementById('doseWeight').value);
   const dosePerKg = Number(document.getElementById('dosePerKg').value);
