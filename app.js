@@ -371,7 +371,7 @@ document.getElementById('authForm').addEventListener('submit', async event => {
     if (error) throw error;
   } catch (error) {
     const message = error.message || '';
-    if (message.toLowerCase().includes('invalid login credentials')) showAuthMessage('E-mail ou senha incorretos. Se esta conta ainda não existe no projeto, envie um convite pelo Supabase antes de entrar.', true);
+    if (message.toLowerCase().includes('invalid login credentials')) showAuthMessage('E-mail ou senha não conferem. Se ainda não definiu uma senha, use “Esqueci ou preciso definir minha senha”.', true);
     else showAuthMessage(message || 'Não foi possível entrar. Confira a conexão e tente novamente.', true);
   } finally {
     button.disabled = false;
@@ -397,7 +397,15 @@ document.getElementById('authRecovery').addEventListener('click', async () => {
     if (error) throw error;
     showAuthMessage('Se este e-mail estiver cadastrado, você receberá um link para definir uma senha. Confira também o spam.');
   } catch (error) {
-    showAuthMessage(error.message || 'Não foi possível solicitar a redefinição de senha.', true);
+    const message = (error.message || '').toLowerCase();
+    const code = (error.code || '').toLowerCase();
+    if (code === 'over_email_send_rate_limit' || message.includes('email rate limit exceeded')) {
+      showAuthMessage('O limite de envio de e-mails do Supabase foi atingido. Aguarde cerca de uma hora desde o último envio antes de pedir outro link. Convites e redefinições compartilham esse limite.', true);
+    } else if (code === 'email_address_not_authorized') {
+      showAuthMessage('O envio padrão do Supabase só atende endereços autorizados da equipe. É necessário configurar um provedor SMTP próprio.', true);
+    } else {
+      showAuthMessage(error.message || 'Não foi possível solicitar a redefinição de senha.', true);
+    }
   } finally {
     button.disabled = false;
   }
@@ -436,6 +444,13 @@ if (authClient) {
   authClient.auth.getSession().then(({ data, error }) => {
     if (error) showAuthMessage('Não foi possível verificar a sessão. Atualize a página e tente novamente.', true);
     applyAuthSession(data?.session || null);
+    if (!data?.session) {
+      const callbackParams = new URLSearchParams(location.hash.replace(/^#/, ''));
+      if (callbackParams.get('error_code') === 'otp_expired' && !callbackParams.has('access_token')) {
+        history.replaceState(null, document.title, `${location.pathname}${location.search}`);
+        showAuthMessage('Este link expirou ou já foi usado. Solicite um novo link; se o limite de envio aparecer, aguarde antes de tentar novamente.', true);
+      }
+    }
   }).catch(() => {
     showAuthMessage('Não foi possível verificar a sessão. Atualize a página e tente novamente.', true);
     applyAuthSession(null);
