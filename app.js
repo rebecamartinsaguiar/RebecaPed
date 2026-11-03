@@ -340,16 +340,20 @@ const authClient = window.MEU_PLANTAO_SUPABASE_CLIENT;
 const authGate = document.getElementById('authGate');
 const appShell = document.getElementById('appShell');
 const authMessage = document.getElementById('authMessage');
+let passwordRecoveryMode = false;
 function showAuthMessage(message, isError = false) {
   authMessage.textContent = message;
   authMessage.classList.toggle('error', isError);
 }
 function applyAuthSession(session) {
   const signedIn = Boolean(session?.user);
-  authGate.hidden = signedIn;
-  appShell.hidden = !signedIn;
+  const changingPassword = signedIn && passwordRecoveryMode;
+  authGate.hidden = signedIn && !changingPassword;
+  appShell.hidden = !signedIn || changingPassword;
+  document.getElementById('authForm').hidden = changingPassword;
+  document.getElementById('authPasswordRecoveryForm').hidden = !changingPassword;
   document.getElementById('authSignOut').hidden = !signedIn;
-  if (signedIn) showAuthMessage('');
+  if (signedIn && !changingPassword) showAuthMessage('');
 }
 document.getElementById('authForm').addEventListener('submit', async event => {
   event.preventDefault();
@@ -359,20 +363,62 @@ document.getElementById('authForm').addEventListener('submit', async event => {
   }
   const button = document.getElementById('authSubmit');
   button.disabled = true;
-  showAuthMessage('Enviando link…');
+  showAuthMessage('Verificando acesso…');
   try {
     const email = document.getElementById('authEmail').value.trim();
-    const emailRedirectTo = `${location.origin}${location.pathname}`;
-    const { error } = await authClient.auth.signInWithOtp({ email, options: { shouldCreateUser: false, emailRedirectTo } });
+    const password = document.getElementById('authPassword').value;
+    const { error } = await authClient.auth.signInWithPassword({ email, password });
     if (error) throw error;
-    showAuthMessage('Se este e-mail tiver uma conta autorizada, você receberá um link de acesso. Confira também o spam.');
   } catch (error) {
     const message = error.message || '';
-    if (message.toLowerCase().includes('signups not allowed for otp')) {
-      showAuthMessage('Este e-mail ainda não tem uma conta neste projeto. Convide-o em Supabase → Authentication → Users e aceite o convite antes de tentar entrar novamente.', true);
-    } else {
-      showAuthMessage(message || 'Não foi possível enviar o link. Confira as configurações de autenticação.', true);
-    }
+    if (message.toLowerCase().includes('invalid login credentials')) showAuthMessage('E-mail ou senha incorretos. Se esta conta ainda não existe no projeto, envie um convite pelo Supabase antes de entrar.', true);
+    else showAuthMessage(message || 'Não foi possível entrar. Confira a conexão e tente novamente.', true);
+  } finally {
+    button.disabled = false;
+  }
+});
+document.getElementById('authRecovery').addEventListener('click', async () => {
+  if (!authClient) {
+    showAuthMessage('Não foi possível iniciar a recuperação. Confira a conexão e a configuração do Supabase.', true);
+    return;
+  }
+  const email = document.getElementById('authEmail').value.trim();
+  if (!email) {
+    document.getElementById('authEmail').focus();
+    showAuthMessage('Informe seu e-mail para receber o link de redefinição.', true);
+    return;
+  }
+  const button = document.getElementById('authRecovery');
+  button.disabled = true;
+  showAuthMessage('Solicitando link de redefinição…');
+  try {
+    const redirectTo = `${location.origin}${location.pathname}`;
+    const { error } = await authClient.auth.resetPasswordForEmail(email, { redirectTo });
+    if (error) throw error;
+    showAuthMessage('Se este e-mail estiver cadastrado, você receberá um link para definir uma senha. Confira também o spam.');
+  } catch (error) {
+    showAuthMessage(error.message || 'Não foi possível solicitar a redefinição de senha.', true);
+  } finally {
+    button.disabled = false;
+  }
+});
+document.getElementById('authPasswordRecoveryForm').addEventListener('submit', async event => {
+  event.preventDefault();
+  const password = document.getElementById('newPassword').value;
+  const confirmation = document.getElementById('confirmPassword').value;
+  if (password.length < 8) { showAuthMessage('A senha precisa ter pelo menos 8 caracteres.', true); return; }
+  if (password !== confirmation) { showAuthMessage('As senhas não conferem.', true); return; }
+  const button = document.getElementById('savePassword');
+  button.disabled = true;
+  try {
+    const { error } = await authClient.auth.updateUser({ password });
+    if (error) throw error;
+    passwordRecoveryMode = false;
+    const { data } = await authClient.auth.getSession();
+    applyAuthSession(data?.session || null);
+    showToast('Senha atualizada.');
+  } catch (error) {
+    showAuthMessage(error.message || 'Não foi possível atualizar a senha. Solicite um novo link de redefinição.', true);
   } finally {
     button.disabled = false;
   }
@@ -383,7 +429,10 @@ document.getElementById('authSignOut').addEventListener('click', async () => {
   if (error) showToast('Não foi possível sair da conta.');
 });
 if (authClient) {
-  authClient.auth.onAuthStateChange((_event, session) => applyAuthSession(session));
+  authClient.auth.onAuthStateChange((event, session) => {
+    if (event === 'PASSWORD_RECOVERY') passwordRecoveryMode = true;
+    applyAuthSession(session);
+  });
   authClient.auth.getSession().then(({ data, error }) => {
     if (error) showAuthMessage('Não foi possível verificar a sessão. Atualize a página e tente novamente.', true);
     applyAuthSession(data?.session || null);
