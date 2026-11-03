@@ -367,7 +367,12 @@ document.getElementById('authForm').addEventListener('submit', async event => {
     if (error) throw error;
     showAuthMessage('Se este e-mail tiver uma conta autorizada, você receberá um link de acesso. Confira também o spam.');
   } catch (error) {
-    showAuthMessage(error.message || 'Não foi possível enviar o link. Confira as configurações de autenticação.', true);
+    const message = error.message || '';
+    if (message.toLowerCase().includes('signups not allowed for otp')) {
+      showAuthMessage('Este e-mail ainda não tem uma conta neste projeto. Convide-o em Supabase → Authentication → Users e aceite o convite antes de tentar entrar novamente.', true);
+    } else {
+      showAuthMessage(message || 'Não foi possível enviar o link. Confira as configurações de autenticação.', true);
+    }
   } finally {
     button.disabled = false;
   }
