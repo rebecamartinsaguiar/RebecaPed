@@ -1,6 +1,10 @@
 const STORAGE_KEY = 'meu-plantao:v1';
 const FILE_DB_NAME = 'meu-plantao-files-v1';
 const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
+const SYNC_META_KEY = 'meu-plantao:sync:v1';
+const LOCAL_BACKUP_KEY = 'meu-plantao:pre-sync-backup:v1';
+const STORAGE_BUCKET = 'protocol-attachments';
+const SUPPORTED_ATTACHMENT_TYPES = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/gif']);
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const number = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 });
 const monthFormat = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' });
@@ -36,6 +40,22 @@ function loadState() {
     const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
     return { shifts: Array.isArray(parsed.shifts) ? parsed.shifts : [], medications: Array.isArray(parsed.medications) ? parsed.medications : [], protocols: Array.isArray(parsed.protocols) ? parsed.protocols : [] };
   } catch { return { shifts: [], medications: [], protocols: [] }; }
+}
+function emptyPendingDeletes() { return { shifts: [], medications: [], protocols: [], attachments: [] }; }
+function emptySyncMeta() { return { ownerId: null, baseline: { shifts: [], medications: [], protocols: [], attachments: [] }, pendingDeletes: emptyPendingDeletes() }; }
+function loadSyncMeta() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(SYNC_META_KEY) || 'null');
+    if (!stored || typeof stored !== 'object') return emptySyncMeta();
+    return { ...emptySyncMeta(), ...stored, baseline: { ...emptySyncMeta().baseline, ...(stored.baseline || {}) }, pendingDeletes: { ...emptyPendingDeletes(), ...(stored.pendingDeletes || {}) } };
+  } catch { return emptySyncMeta(); }
+}
+function cloneState(value = state) { return JSON.parse(JSON.stringify(value)); }
+function hasRecords(value) { return Boolean(value && ['shifts', 'medications', 'protocols'].some(key => Array.isArray(value[key]) && value[key].length)); }
+function currentAttachmentIds(value = state) { return new Set(value.protocols.flatMap(protocol => (protocol.attachments || []).map(file => file.id))); }
+function countRecords(value) {
+  const attachments = value.protocols.reduce((sum, protocol) => sum + (protocol.attachments || []).length, 0);
+  return { shifts: value.shifts.length, medications: value.medications.length, protocols: value.protocols.length, attachments };
 }
 function openFileDatabase() {
   return new Promise((resolve, reject) => {
@@ -75,13 +95,29 @@ async function removeAttachment(id) {
   });
 }
 let state = loadState();
+let syncMeta = loadSyncMeta();
+let cloudBaseline = {
+  shifts: new Set(syncMeta.baseline.shifts),
+  medications: new Set(syncMeta.baseline.medications),
+  protocols: new Set(syncMeta.baseline.protocols),
+  attachments: new Map(syncMeta.baseline.attachments.map(item => [item.id, item])),
+};
+let activeCloudUser = null;
+let cloudPhase = 'signed-out';
+let cloudBootPromise = null;
+let cloudBootUserId = null;
+let cloudWriteQueue = Promise.resolve();
+let pendingLocalImport = null;
+let pendingRemoteState = null;
 let viewMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
 let selectedDate = todayKey();
 let toastTimer;
 
 function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  recordPendingDeletes();
   renderAll();
+  if (activeCloudUser && cloudPhase === 'ready') queueCloudSync();
 }
 function showToast(message) {
   const toast = document.getElementById('toast');
@@ -97,6 +133,391 @@ function monthShifts(date = viewMonth) {
 }
 function hoursTotal(shifts) { return shifts.reduce((sum, shift) => sum + hoursFor(shift), 0); }
 function amountTotal(shifts) { return shifts.reduce((sum, shift) => sum + Number(shift.value || 0), 0); }
+
+function setSyncStatus(message, status = 'ready') {
+  const element = document.getElementById('syncStatus');
+  element.textContent = message;
+  element.dataset.state = status;
+}
+function persistStateOnly() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+function saveCloudMetadata() {
+  syncMeta = {
+    ownerId: activeCloudUser?.id || syncMeta.ownerId,
+    baseline: {
+      shifts: [...cloudBaseline.shifts],
+      medications: [...cloudBaseline.medications],
+      protocols: [...cloudBaseline.protocols],
+      attachments: [...cloudBaseline.attachments.values()],
+    },
+    pendingDeletes: syncMeta.pendingDeletes,
+  };
+  localStorage.setItem(SYNC_META_KEY, JSON.stringify(syncMeta));
+}
+function recordPendingDeletes() {
+  if (!activeCloudUser || syncMeta.ownerId !== activeCloudUser.id) return;
+  const current = {
+    shifts: new Set(state.shifts.map(item => item.id)),
+    medications: new Set(state.medications.map(item => item.id)),
+    protocols: new Set(state.protocols.map(item => item.id)),
+    attachments: currentAttachmentIds(),
+  };
+  for (const type of ['shifts', 'medications', 'protocols']) {
+    const pending = new Set(syncMeta.pendingDeletes[type]);
+    for (const id of cloudBaseline[type]) if (!current[type].has(id)) pending.add(id);
+    syncMeta.pendingDeletes[type] = [...pending];
+  }
+  const pendingAttachments = new Set(syncMeta.pendingDeletes.attachments);
+  for (const id of cloudBaseline.attachments.keys()) if (!current.attachments.has(id)) pendingAttachments.add(id);
+  syncMeta.pendingDeletes.attachments = [...pendingAttachments];
+  saveCloudMetadata();
+}
+function dataOrThrow(result) {
+  if (result.error) throw result.error;
+  return result.data || [];
+}
+function setCloudBaseline(remote) {
+  cloudBaseline = {
+    shifts: new Set(remote.state.shifts.map(item => item.id)),
+    medications: new Set(remote.state.medications.map(item => item.id)),
+    protocols: new Set(remote.state.protocols.map(item => item.id)),
+    attachments: new Map(remote.attachments.map(item => [item.id, item])),
+  };
+}
+async function fetchUserCloudState(userId) {
+  const [shiftResult, medicationResult, protocolResult, attachmentResult] = await Promise.all([
+    authClient.from('shifts').select('*').eq('owner_id', userId).order('work_date'),
+    authClient.from('user_medication_references').select('*').eq('owner_id', userId).order('medication_name'),
+    authClient.from('protocols').select('*').eq('owner_id', userId).order('title'),
+    authClient.from('protocol_attachments').select('*').eq('owner_id', userId),
+  ]);
+  const shiftRows = dataOrThrow(shiftResult);
+  const medicationRows = dataOrThrow(medicationResult);
+  const protocolRows = dataOrThrow(protocolResult);
+  const attachmentRows = dataOrThrow(attachmentResult);
+  const attachmentsByProtocol = new Map();
+  const attachments = attachmentRows.map(row => ({ id: row.id, protocolId: row.protocol_id, storagePath: row.storage_path }));
+  attachmentRows.forEach(row => {
+    const list = attachmentsByProtocol.get(row.protocol_id) || [];
+    list.push({ id: row.id, name: row.original_name, type: row.mime_type, size: Number(row.size_bytes), storagePath: row.storage_path });
+    attachmentsByProtocol.set(row.protocol_id, list);
+  });
+  return {
+    state: {
+      shifts: shiftRows.map(row => ({ id: row.id, date: row.work_date, start: String(row.start_time).slice(0, 5), end: String(row.end_time).slice(0, 5), value: Number(row.amount_brl) })),
+      medications: medicationRows.map(row => ({ id: row.id, name: row.medication_name, presentation: row.presentation || '', dosePerKg: row.dose_per_kg_per_dose == null ? '' : Number(row.dose_per_kg_per_dose), concentration: row.concentration_mg_ml == null ? '' : Number(row.concentration_mg_ml), maxDose: row.max_dose_mg == null ? '' : Number(row.max_dose_mg), interval: row.interval_text || '', contraindications: row.contraindications || '', interactions: row.interactions || '', url: row.source_url || '', reviewed: row.reviewed_on || '' })),
+      protocols: protocolRows.map(row => ({ id: row.id, title: row.title, source: row.source_name || '', url: row.external_url || '', reviewed: row.reviewed_on || '', attachments: attachmentsByProtocol.get(row.id) || [] })),
+    },
+    attachments,
+  };
+}
+function removePendingDeletes(remoteState, pending) {
+  const deleted = {
+    shifts: new Set(pending.shifts), medications: new Set(pending.medications),
+    protocols: new Set(pending.protocols), attachments: new Set(pending.attachments),
+  };
+  return {
+    ...remoteState,
+    shifts: remoteState.shifts.filter(item => !deleted.shifts.has(item.id)),
+    medications: remoteState.medications.filter(item => !deleted.medications.has(item.id)),
+    protocols: remoteState.protocols.filter(item => !deleted.protocols.has(item.id)).map(protocol => ({ ...protocol, attachments: protocol.attachments.filter(file => !deleted.attachments.has(file.id)) })),
+  };
+}
+function localOnlyCounts(local, remote) {
+  const shiftIds = new Set(remote.shifts.map(item => item.id));
+  const medicationIds = new Set(remote.medications.map(item => item.id));
+  const protocolIds = new Set(remote.protocols.map(item => item.id));
+  const attachmentIds = currentAttachmentIds(remote);
+  return {
+    shifts: local.shifts.filter(item => !shiftIds.has(item.id)).length,
+    medications: local.medications.filter(item => !medicationIds.has(item.id)).length,
+    protocols: local.protocols.filter(item => !protocolIds.has(item.id)).length,
+    attachments: local.protocols.reduce((sum, protocol) => sum + (protocol.attachments || []).filter(file => !attachmentIds.has(file.id)).length, 0),
+  };
+}
+function mergeRemoteAndLocal(remote, local) {
+  const mergeById = (remoteItems, localItems) => {
+    const result = [...remoteItems];
+    const ids = new Set(remoteItems.map(item => item.id));
+    localItems.forEach(item => { if (!ids.has(item.id)) result.push(item); });
+    return result;
+  };
+  const remoteProtocols = new Map(remote.protocols.map(item => [item.id, item]));
+  const protocols = [...remote.protocols];
+  local.protocols.forEach(localProtocol => {
+    const remoteProtocol = remoteProtocols.get(localProtocol.id);
+    if (!remoteProtocol) { protocols.push(localProtocol); return; }
+    const ids = new Set(remoteProtocol.attachments.map(file => file.id));
+    remoteProtocol.attachments.push(...(localProtocol.attachments || []).filter(file => !ids.has(file.id)));
+  });
+  return {
+    shifts: mergeById(remote.shifts, local.shifts),
+    medications: mergeById(remote.medications, local.medications),
+    protocols,
+  };
+}
+function localBackupAvailable() {
+  try { return Boolean(JSON.parse(localStorage.getItem(LOCAL_BACKUP_KEY) || 'null')?.state); }
+  catch { return false; }
+}
+function updateCloudButtons() {
+  document.getElementById('syncNow').hidden = !activeCloudUser;
+  document.getElementById('importLocalBackup').hidden = !activeCloudUser || !localBackupAvailable();
+}
+async function upsertSnapshot(snapshot, user) {
+  const now = new Date().toISOString();
+  const shifts = snapshot.shifts.map(item => ({ id: item.id, owner_id: user.id, work_date: item.date, start_time: item.start, end_time: item.end, amount_brl: Number(item.value || 0), updated_at: now }));
+  const medications = snapshot.medications.map(item => ({
+    id: item.id, owner_id: user.id, medication_name: item.name, presentation: item.presentation || null,
+    dose_per_kg_per_dose: item.dosePerKg === '' || item.dosePerKg == null ? null : Number(item.dosePerKg),
+    concentration_mg_ml: item.concentration === '' || item.concentration == null ? null : Number(item.concentration),
+    max_dose_mg: item.maxDose === '' || item.maxDose == null ? null : Number(item.maxDose),
+    interval_text: item.interval || null, contraindications: item.contraindications || null,
+    interactions: item.interactions || null, source_url: cleanUrl(item.url) || null, reviewed_on: item.reviewed || null, updated_at: now,
+  }));
+  const protocols = snapshot.protocols.map(item => ({ id: item.id, owner_id: user.id, title: item.title, source_name: item.source || null, external_url: cleanUrl(item.url) || null, reviewed_on: item.reviewed || null, updated_at: now }));
+  if (shifts.length) dataOrThrow(await authClient.from('shifts').upsert(shifts, { onConflict: 'id' }));
+  if (medications.length) dataOrThrow(await authClient.from('user_medication_references').upsert(medications, { onConflict: 'id' }));
+  if (protocols.length) dataOrThrow(await authClient.from('protocols').upsert(protocols, { onConflict: 'id' }));
+
+  const attachmentRows = [];
+  for (const protocol of snapshot.protocols) {
+    for (const file of protocol.attachments || []) {
+      let storagePath = file.storagePath || '';
+      let mimeType = file.type || '';
+      let fileSize = Number(file.size || 0);
+      if (!storagePath) {
+        const localFile = await readAttachment(file.id);
+        if (!localFile?.blob) throw new Error(`O anexo “${file.name}” não foi encontrado neste navegador. Ele continua listado nos dados locais.`);
+        mimeType = localFile.type || mimeType;
+        fileSize = Number(localFile.size || fileSize);
+        if (!SUPPORTED_ATTACHMENT_TYPES.has(mimeType)) throw new Error(`O formato do anexo “${file.name}” não é aceito pelo armazenamento privado.`);
+        if (fileSize < 1 || fileSize > MAX_ATTACHMENT_BYTES) throw new Error(`O anexo “${file.name}” excede o limite de 20 MB.`);
+        storagePath = `${user.id}/${protocol.id}/${file.id}`;
+        const upload = await authClient.storage.from(STORAGE_BUCKET).upload(storagePath, localFile.blob, { contentType: mimeType, upsert: true });
+        if (upload.error) throw upload.error;
+        file.storagePath = storagePath;
+        file.type = mimeType;
+        file.size = fileSize;
+      }
+      attachmentRows.push({ id: file.id, protocol_id: protocol.id, owner_id: user.id, storage_path: storagePath, original_name: file.name, mime_type: mimeType, size_bytes: fileSize });
+    }
+  }
+  if (attachmentRows.length) dataOrThrow(await authClient.from('protocol_attachments').upsert(attachmentRows, { onConflict: 'id' }));
+  persistStateOnly();
+}
+async function deleteCloudRows(table, ids, userId) {
+  for (const id of ids) {
+    const result = await authClient.from(table).delete().eq('owner_id', userId).eq('id', id);
+    if (result.error) throw result.error;
+  }
+}
+async function syncLocalStateToCloud(user) {
+  if (!user || cloudPhase !== 'ready') return;
+  const snapshot = cloneState();
+  recordPendingDeletes();
+  setSyncStatus('Sincronizando…', 'loading');
+  await upsertSnapshot(snapshot, user);
+  const uploadedPaths = new Map(snapshot.protocols.flatMap(protocol => (protocol.attachments || []).filter(file => file.storagePath).map(file => [file.id, file])));
+  state.protocols.forEach(protocol => (protocol.attachments || []).forEach(file => {
+    const uploaded = uploadedPaths.get(file.id);
+    if (uploaded) { file.storagePath = uploaded.storagePath; file.type = uploaded.type; file.size = uploaded.size; }
+  }));
+
+  const deletedProtocols = new Set(syncMeta.pendingDeletes.protocols);
+  const deletedAttachments = new Set(syncMeta.pendingDeletes.attachments);
+  for (const [id, file] of cloudBaseline.attachments) if (deletedProtocols.has(file.protocolId)) deletedAttachments.add(id);
+  const storagePaths = [...deletedAttachments].map(id => cloudBaseline.attachments.get(id)?.storagePath).filter(Boolean);
+  if (storagePaths.length) {
+    const result = await authClient.storage.from(STORAGE_BUCKET).remove(storagePaths);
+    if (result.error) throw result.error;
+  }
+  await deleteCloudRows('protocol_attachments', [...deletedAttachments], user.id);
+  await deleteCloudRows('shifts', syncMeta.pendingDeletes.shifts, user.id);
+  await deleteCloudRows('user_medication_references', syncMeta.pendingDeletes.medications, user.id);
+  await deleteCloudRows('protocols', [...deletedProtocols], user.id);
+
+  cloudBaseline = {
+    shifts: new Set(snapshot.shifts.map(item => item.id)),
+    medications: new Set(snapshot.medications.map(item => item.id)),
+    protocols: new Set(snapshot.protocols.map(item => item.id)),
+    attachments: new Map(snapshot.protocols.flatMap(protocol => (protocol.attachments || []).filter(file => file.storagePath).map(file => [file.id, { id: file.id, protocolId: protocol.id, storagePath: file.storagePath }]))),
+  };
+  syncMeta.pendingDeletes = emptyPendingDeletes();
+  syncMeta.ownerId = user.id;
+  saveCloudMetadata();
+  persistStateOnly();
+  setSyncStatus('Sincronizado', 'ready');
+}
+function queueCloudSync() {
+  const user = activeCloudUser;
+  const task = cloudWriteQueue.catch(() => {}).then(() => syncLocalStateToCloud(user));
+  cloudWriteQueue = task;
+  return task;
+}
+function scheduleCloudSync() {
+  queueCloudSync().catch(error => {
+    setSyncStatus('Salvo neste aparelho; nuvem indisponível', 'error');
+    showToast(error.message || 'Não foi possível sincronizar. Os dados locais foram preservados.');
+  });
+}
+function saveLocalBackup(value) {
+  if (!hasRecords(value)) return;
+  localStorage.setItem(LOCAL_BACKUP_KEY, JSON.stringify({ savedAt: new Date().toISOString(), state: value }));
+  updateCloudButtons();
+}
+function persistLoadedState(value) {
+  state = value;
+  persistStateOnly();
+  renderAll();
+}
+function openLocalImportDialog(local, remote) {
+  pendingLocalImport = cloneState(local);
+  pendingRemoteState = cloneState(remote);
+  const counts = localOnlyCounts(pendingLocalImport, pendingRemoteState);
+  document.getElementById('localImportSummary').textContent = `Há ${counts.shifts} plantão(ões), ${counts.medications} referência(s), ${counts.protocols} protocolo(s) e ${counts.attachments} anexo(s) que ainda não estão na nuvem.`;
+  document.getElementById('appShell').hidden = false;
+  document.getElementById('authGate').hidden = true;
+  document.getElementById('localImportDialog').showModal();
+  setSyncStatus('Escolha como continuar', 'loading');
+}
+async function initializeCloudForUser(user) {
+  const local = cloneState();
+  const savedMetadata = loadSyncMeta();
+  syncMeta = savedMetadata.ownerId === user.id ? savedMetadata : { ...emptySyncMeta(), ownerId: user.id };
+  try {
+    setSyncStatus('Carregando nuvem…', 'loading');
+    const remote = await fetchUserCloudState(user.id);
+    setCloudBaseline(remote);
+    const visibleRemote = removePendingDeletes(remote.state, syncMeta.pendingDeletes);
+    const unmatched = localOnlyCounts(local, visibleRemote);
+    const unmatchedTotal = Object.values(unmatched).reduce((sum, value) => sum + value, 0);
+    if (unmatchedTotal > 0) {
+      cloudPhase = 'choosing';
+      openLocalImportDialog(local, visibleRemote);
+      updateCloudButtons();
+      return;
+    }
+    persistLoadedState(visibleRemote);
+    syncMeta.ownerId = user.id;
+    cloudPhase = 'ready';
+    saveCloudMetadata();
+    setSyncStatus('Sincronizado', 'ready');
+    updateCloudButtons();
+    if (Object.values(syncMeta.pendingDeletes).some(ids => ids.length)) scheduleCloudSync();
+  } catch (error) {
+    cloudPhase = 'offline';
+    document.getElementById('authGate').hidden = true;
+    document.getElementById('appShell').hidden = false;
+    renderAll();
+    updateCloudButtons();
+    setSyncStatus('Offline: dados mantidos neste aparelho', 'error');
+    showToast(error.message || 'Não foi possível carregar a nuvem. Os dados deste aparelho foram preservados.');
+  }
+}
+function beginCloudBootstrap(user, force = false) {
+  if (!user) return;
+  if (activeCloudUser?.id === user.id && ['ready', 'choosing', 'loading'].includes(cloudPhase)) return cloudBootPromise;
+  if (activeCloudUser?.id === user.id && cloudPhase === 'offline' && !force) return;
+  activeCloudUser = user;
+  cloudPhase = 'loading';
+  cloudBootUserId = user.id;
+  cloudBootPromise = initializeCloudForUser(user).finally(() => {
+    if (cloudBootUserId === user.id) { cloudBootPromise = null; cloudBootUserId = null; }
+  });
+  return cloudBootPromise;
+}
+async function chooseLocalImport(importLocal) {
+  const dialog = document.getElementById('localImportDialog');
+  const importButton = document.getElementById('importLocalData');
+  const cloudButton = document.getElementById('useCloudData');
+  importButton.disabled = true;
+  cloudButton.disabled = true;
+  try {
+    if (!activeCloudUser || !pendingRemoteState || !pendingLocalImport) throw new Error('A sessão mudou. Entre novamente para continuar a sincronização.');
+    if (importLocal) {
+      const merged = mergeRemoteAndLocal(pendingRemoteState, pendingLocalImport);
+      state = merged;
+      setSyncStatus('Importando registros…', 'loading');
+      await upsertSnapshot(state, activeCloudUser);
+      const remote = await fetchUserCloudState(activeCloudUser.id);
+      setCloudBaseline(remote);
+      persistLoadedState(removePendingDeletes(remote.state, syncMeta.pendingDeletes));
+      localStorage.removeItem(LOCAL_BACKUP_KEY);
+    } else {
+      saveLocalBackup(pendingLocalImport);
+      persistLoadedState(pendingRemoteState);
+    }
+    syncMeta.ownerId = activeCloudUser.id;
+    cloudPhase = 'ready';
+    saveCloudMetadata();
+    dialog.close();
+    pendingLocalImport = null;
+    pendingRemoteState = null;
+    setSyncStatus('Sincronizado', 'ready');
+    updateCloudButtons();
+    if (Object.values(syncMeta.pendingDeletes).some(ids => ids.length)) scheduleCloudSync();
+  } catch (error) {
+    setSyncStatus('Importação pendente', 'error');
+    showToast(error.message || 'Não foi possível concluir a importação. Os dados locais continuam preservados.');
+  } finally {
+    importButton.disabled = false;
+    cloudButton.disabled = false;
+  }
+}
+async function importLocalBackup() {
+  try {
+    const backup = JSON.parse(localStorage.getItem(LOCAL_BACKUP_KEY) || 'null');
+    if (!backup?.state || !activeCloudUser) return;
+    const remote = await fetchUserCloudState(activeCloudUser.id);
+    setCloudBaseline(remote);
+    const visibleRemote = removePendingDeletes(remote.state, syncMeta.pendingDeletes);
+    const counts = localOnlyCounts(backup.state, visibleRemote);
+    if (!Object.values(counts).some(value => value > 0)) {
+      localStorage.removeItem(LOCAL_BACKUP_KEY);
+      updateCloudButtons();
+      showToast('Esse backup já está na nuvem.');
+      return;
+    }
+    cloudPhase = 'choosing';
+    openLocalImportDialog(backup.state, visibleRemote);
+  } catch (error) {
+    showToast(error.message || 'Não foi possível abrir o backup local.');
+  }
+}
+async function syncNow() {
+  if (!activeCloudUser) return;
+  const button = document.getElementById('syncNow');
+  button.disabled = true;
+  try {
+    if (cloudPhase === 'offline') {
+      await beginCloudBootstrap(activeCloudUser, true);
+      if (cloudPhase !== 'ready') return;
+    }
+    if (cloudPhase !== 'ready') return;
+    await queueCloudSync();
+    const remote = await fetchUserCloudState(activeCloudUser.id);
+    setCloudBaseline(remote);
+    const visibleRemote = removePendingDeletes(remote.state, syncMeta.pendingDeletes);
+    persistLoadedState(mergeRemoteAndLocal(visibleRemote, state));
+    syncMeta.ownerId = activeCloudUser.id;
+    saveCloudMetadata();
+    setSyncStatus('Sincronizado', 'ready');
+  } catch (error) {
+    setSyncStatus('Falha na sincronização', 'error');
+    showToast(error.message || 'Não foi possível sincronizar agora.');
+  } finally {
+    button.disabled = false;
+  }
+}
+document.getElementById('syncNow').addEventListener('click', syncNow);
+document.getElementById('importLocalBackup').addEventListener('click', importLocalBackup);
+document.getElementById('useCloudData').addEventListener('click', () => chooseLocalImport(false));
+document.getElementById('importLocalData').addEventListener('click', () => chooseLocalImport(true));
+window.addEventListener('online', () => {
+  if (!activeCloudUser) return;
+  if (cloudPhase === 'offline') beginCloudBootstrap(activeCloudUser, true);
+  else if (cloudPhase === 'ready') scheduleCloudSync();
+});
 
 function renderHome() {
   const shifts = monthShifts(new Date());
@@ -204,12 +625,18 @@ function renderProtocolList() {
   }).join('');
   element.querySelectorAll('[data-open-file]').forEach(button => button.addEventListener('click', async () => {
     try {
-      const file = await readAttachment(button.dataset.openFile);
-      if (!file) { showToast('Anexo não encontrado neste navegador.'); return; }
-      const fileUrl = URL.createObjectURL(file.blob);
+      const fileInfo = files.find(file => file.id === button.dataset.openFile);
+      let blob = (await readAttachment(button.dataset.openFile))?.blob;
+      if (!blob && fileInfo?.storagePath && activeCloudUser) {
+        const { data, error } = await authClient.storage.from(STORAGE_BUCKET).download(fileInfo.storagePath);
+        if (error) throw error;
+        blob = data;
+      }
+      if (!blob) { showToast('Anexo não encontrado neste aparelho nem na nuvem.'); return; }
+      const fileUrl = URL.createObjectURL(blob);
       window.open(fileUrl, '_blank', 'noopener,noreferrer');
       setTimeout(() => URL.revokeObjectURL(fileUrl), 60_000);
-    } catch { showToast('Não foi possível abrir o anexo.'); }
+    } catch (error) { showToast(error.message || 'Não foi possível abrir o anexo.'); }
   }));
   element.querySelectorAll('[data-delete-protocol]').forEach(button => button.addEventListener('click', () => {
     const item = state.protocols.find(protocol => protocol.id === button.dataset.deleteProtocol);
@@ -292,7 +719,7 @@ document.getElementById('protocolForm').addEventListener('submit', async event =
   event.preventDefault();
   const input = document.getElementById('protocolFiles');
   const files = [...(input.files || [])];
-  const validFiles = files.every(file => (file.type === 'application/pdf' || file.type.startsWith('image/')) && file.size <= MAX_ATTACHMENT_BYTES);
+  const validFiles = files.every(file => SUPPORTED_ATTACHMENT_TYPES.has(file.type) && file.size > 0 && file.size <= MAX_ATTACHMENT_BYTES);
   if (!validFiles) { showToast('Anexe PDF ou imagem de até 20 MB cada.'); return; }
   try {
     const attachments = await Promise.all(files.map(saveAttachment));
@@ -348,12 +775,22 @@ function showAuthMessage(message, isError = false) {
 function applyAuthSession(session) {
   const signedIn = Boolean(session?.user);
   const changingPassword = signedIn && passwordRecoveryMode;
-  authGate.hidden = signedIn && !changingPassword;
-  appShell.hidden = !signedIn || changingPassword;
-  document.getElementById('authForm').hidden = changingPassword;
+  if (!signedIn) {
+    activeCloudUser = null;
+    cloudPhase = 'signed-out';
+    setSyncStatus('Entre para sincronizar', 'ready');
+  } else {
+    beginCloudBootstrap(session.user);
+  }
+  const loadingCloud = signedIn && cloudPhase === 'loading' && !changingPassword;
+  authGate.hidden = signedIn && !changingPassword && !loadingCloud;
+  appShell.hidden = !signedIn || changingPassword || loadingCloud;
+  document.getElementById('authForm').hidden = changingPassword || loadingCloud;
   document.getElementById('authPasswordRecoveryForm').hidden = !changingPassword;
+  document.getElementById('authLoading').hidden = !loadingCloud;
   document.getElementById('authSignOut').hidden = !signedIn;
-  if (signedIn && !changingPassword) showAuthMessage('');
+  if (signedIn && !changingPassword && !loadingCloud) showAuthMessage('');
+  updateCloudButtons();
 }
 document.getElementById('authForm').addEventListener('submit', async event => {
   event.preventDefault();
