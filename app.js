@@ -778,6 +778,10 @@ function applyAuthSession(session) {
   if (!signedIn) {
     activeCloudUser = null;
     cloudPhase = 'signed-out';
+    const importDialog = document.getElementById('localImportDialog');
+    if (importDialog.open) importDialog.close();
+    pendingLocalImport = null;
+    pendingRemoteState = null;
     setSyncStatus('Entre para sincronizar', 'ready');
   } else {
     beginCloudBootstrap(session.user);
