@@ -686,12 +686,13 @@ function openLocalImportDialog(local, remote) {
   setSyncStatus('Escolha como continuar', 'loading');
 }
 async function initializeCloudForUser(user) {
-  const local = cloneState();
   const savedMetadata = loadSyncMeta();
   syncMeta = savedMetadata.ownerId === user.id ? savedMetadata : { ...emptySyncMeta(), ownerId: user.id };
   try {
     setSyncStatus('Carregando nuvem…', 'loading');
     const remote = await fetchUserCloudState(user.id);
+    // Include edits made locally while the first cloud fetch was in flight.
+    const local = cloneState();
     setCloudBaseline(remote);
     const visibleRemote = removePendingDeletes(remote.state, syncMeta.pendingDeletes);
     const unmatched = localOnlyCounts(local, visibleRemote);
