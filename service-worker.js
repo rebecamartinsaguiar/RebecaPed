@@ -1,4 +1,4 @@
-const CACHE_NAME = 'meu-plantao-v6';
+const CACHE_NAME = 'meu-plantao-v7';
 const APP_FILES = ['./', './index.html', './styles.css', './app.js', './manifest.webmanifest', './supabase-config.js'];
 
 self.addEventListener('install', event => {
