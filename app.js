@@ -6,7 +6,7 @@ const LOCAL_BACKUP_KEY = 'meu-plantao:pre-sync-backup:v1';
 const STORAGE_BUCKET = 'protocol-attachments';
 const SUPPORTED_ATTACHMENT_TYPES = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/gif']);
 const CALCULATOR_CATALOG = {
-  'Hidroeletrolítico': 'Hidratação Venosa|Ânion Gap|Osmolaridade Plasmática|Potássio Corrigido pelo pH|Sódio Corrigido — Hiperglicemia|Cálcio Corrigido — Albumina|Hipernatremia|Hiponatremia|Hipocalemia|SRO|Holliday-Segar|Reposição de Bicarbonato',
+  'Hidroeletrolítico': 'Hidratação Venosa|Ânion Gap|Osmolaridade Plasmática|Sódio Corrigido — Hiperglicemia|Cálcio Corrigido — Albumina|Hipernatremia|Hiponatremia|Hipocalemia|SRO|Holliday-Segar|Reposição de Bicarbonato',
   'UTI / Emergência': 'Emergência Pediátrica|Equivalência de Corticoides|PRISM Original|PRISM III CPCCRN 4h|PRISM IV|PIM 2|PIM 3|PELOD-2|pSOFA|Phoenix Sepsis Score|VIS|OI / OSI|PASS|Pediatric Trauma Score|SIPA|Triagem SIRS pediátrica|Queimaduras — Lund & Browder|Infusão contínua|Vasopressores',
   'Neonatologia': 'Classificação do RN|Reanimação Neonatal|Crescimento do Prematuro INTERGROWTH-21st|Icterícia Neonatal|Nomograma de Bhutani|Score de Rodwell|Capurro Somático|Capurro Somatoneurológico|Escala de Apgar|Idade Corrigida do Prematuro|Escala de Finnegan|Escala de Ballard|Escore de Downes|FiO₂ em baixo fluxo|New Ballard Score|SNAPPE-II|CRIB-II|nSOFA|Silverman-Andersen',
   'Procedimentos': 'Dispositivos Pediátricos|Gotejamento|Tubo IOT Pediátrico',
@@ -46,30 +46,68 @@ const CALCULATOR_IMPLEMENTATIONS = {
   },
   'anion-gap': {
     title: 'Ânion Gap', category: 'Hidroeletrolítico',
-    fields: [{ id: 'na', label: 'Sódio', unit: 'mEq/L' }, { id: 'cl', label: 'Cloreto', unit: 'mEq/L' }, { id: 'hco3', label: 'Bicarbonato', unit: 'mEq/L' }],
+    fields: [{ id: 'na', label: 'Sódio', unit: 'mEq/L', hint: 'Faixa aceita: 100–200' }, { id: 'cl', label: 'Cloreto', unit: 'mEq/L', hint: 'Faixa aceita: 60–160' }, { id: 'hco3', label: 'Bicarbonato', unit: 'mEq/L', hint: 'Faixa aceita: 1–60' }],
     formula: 'Ânion gap = Na − (Cl + HCO₃). Não inclui potássio.',
-    source: { label: 'ISPAD — cetoacidose diabética pediátrica', url: 'https://www.ispad.org/static/6dd62eae-c8cb-4b4a-84e1efc768505746/Ch11PediatricDiabetes.pdf' },
-    calculate: v => ({ lines: [`Ânion gap calculado: ${number.format(v.na - v.cl - v.hco3)} mEq/L.`], warning: 'A interpretação depende do método laboratorial, albumina e contexto clínico; não classifica a causa isoladamente.' }),
+    clinicalGuide: {
+      reference: '10–14 mEq/L (referência exibida pelo Proped para pediatria; confirme a faixa do laboratório local).',
+      sections: [
+        { title: 'O que é', paragraphs: ['O ânion gap estima a diferença entre os cátions e ânions medidos e ajuda a classificar acidose metabólica. Esta calculadora usa Na⁺ − (Cl⁻ + HCO₃⁻), sem incluir K⁺.'] },
+        { title: 'Quando usar', bullets: ['Na avaliação de distúrbio ácido-base, especialmente quando há acidose metabólica.', 'Como parte da investigação de causas com ânion gap aumentado ou normal; o resultado não identifica a causa sozinho.'] },
+        { title: 'Como usar', bullets: ['Informe sódio, cloreto e bicarbonato da mesma coleta e confira as unidades.', 'Compare o resultado com a faixa pediátrica do laboratório e interprete junto da gasometria, albumina e quadro clínico.'] },
+        { title: 'Como interpretar', bullets: ['Um valor acima da referência pode acompanhar acúmulo de ânions não medidos; considere lactato, cetonas, função renal e exposições conforme o contexto.', 'Um valor dentro da faixa não exclui distúrbio ácido-base. Acidose hiperclorêmica pode ocorrer com ânion gap normal.', 'A hipoalbuminemia pode reduzir o ânion gap medido e mascarar aumento; uma fórmula usada para correção é AG + 2,5 × (4 − albumina em g/dL).'] },
+        { title: 'Pontos de atenção', bullets: ['Faixas variam com método, laboratório e idade; use a referência pediátrica local.', 'Considere delta gap/delta ratio quando houver suspeita de distúrbio misto, usando valores de referência adequados ao serviço.', 'O cálculo não substitui gasometria, avaliação clínica ou investigação etiológica.'] },
+      ],
+      references: [{ label: 'Proped — Ânion Gap', url: 'https://proped.app/calculadoras/anion-gap' }, { label: 'ISPAD — diretriz de cetoacidose diabética pediátrica', url: 'https://www.ispad.org/static/6dd62eae-c8cb-4b4a-84e1efc768505746/Ch11PediatricDiabetes.pdf' }],
+    },
+    calculate: v => {
+      const value = v.na - v.cl - v.hco3;
+      const status = value < 10 ? 'Abaixo da referência' : value > 14 ? 'Acima da referência' : 'Ânion gap normal';
+      return { clinical: { label: 'Resultado · Ânion gap', value: clinicalNumber.format(value), unit: 'mEq/L', reference: '10–14 mEq/L', status, tone: value < 10 || value > 14 ? 'out' : 'normal', formula: 'AG = Na⁺ − (Cl⁻ + HCO₃⁻)', memory: `${number.format(v.na)} − (${number.format(v.cl)} + ${number.format(v.hco3)}) = ${clinicalNumber.format(value)} mEq/L` } };
+    },
   },
   'osmolaridade-plasmatica': {
     title: 'Osmolaridade Plasmática', category: 'Hidroeletrolítico',
-    fields: [{ id: 'na', label: 'Sódio', unit: 'mEq/L' }, { id: 'glucose', label: 'Glicose', unit: 'mg/dL' }, { id: 'bun', label: 'Nitrogênio ureico (BUN)', unit: 'mg/dL', optional: true }],
-    formula: 'Estimativa: 2 × Na + glicose/18 + BUN/2,8. Se deixar BUN vazio, o resultado é a osmolaridade efetiva estimada.',
-    source: { label: 'ISPAD — cetoacidose diabética pediátrica', url: 'https://www.ispad.org/static/6dd62eae-c8cb-4b4a-84e1efc768505746/Ch11PediatricDiabetes.pdf' },
-    calculate: v => ({ lines: [`Osmolaridade calculada: ${number.format(2 * v.na + v.glucose / 18 + (v.bun || 0) / 2.8)} mOsm/kg.`], warning: 'É uma estimativa calculada, não substitui osmolaridade medida. A fórmula exige glicose e BUN em mg/dL.' }),
-  },
-  'potassio-corrigido-pelo-ph': {
-    title: 'Potássio Corrigido pelo pH', category: 'Hidroeletrolítico',
-    fields: [{ id: 'potassium', label: 'Potássio medido', unit: 'mEq/L' }, { id: 'pH', label: 'pH medido', unit: 'pH' }, { id: 'targetPH', label: 'pH de referência definido pelo profissional', unit: 'pH' }, { id: 'coefficient', label: 'Coeficiente assinado da fórmula adotada localmente', unit: 'mEq/L por unidade de pH', allowNegative: true }],
-    formula: 'A relação entre pH e potássio varia com o método e o contexto; por isso, o app não fixa um coeficiente. Informe o coeficiente com o sinal indicado pela fórmula aprovada pelo seu serviço.',
-    calculate: v => ({ lines: [`Potássio estimado pela relação informada: ${number.format(v.potassium + v.coefficient * (v.targetPH - v.pH))} mEq/L.`], warning: 'Estimativa dependente do coeficiente inserido. Não use para substituir nova dosagem laboratorial.' }),
+    fields: [{ id: 'na', label: 'Sódio', unit: 'mEq/L', hint: 'Faixa aceita: 100–200' }, { id: 'glucose', label: 'Glicose', unit: 'mg/dL', hint: 'Faixa aceita: 30–1000' }, { id: 'urea', label: 'Ureia', unit: 'mg/dL' }],
+    formula: 'Osmolaridade plasmática estimada = 2 × Na⁺ + glicose/18 + ureia/6.',
+    clinicalGuide: {
+      reference: '275–295 mOsm/L (faixa exibida pelo Proped; confirme referência e unidade do laboratório local).',
+      sections: [
+        { title: 'O que é', paragraphs: ['A osmolaridade calculada estima a concentração de partículas osmoticamente ativas no plasma. A fórmula desta tela usa sódio, glicose e ureia; a tonicidade efetiva exclui a ureia.'] },
+        { title: 'Quando usar', bullets: ['Na avaliação de alterações de hidratação e de sódio, alteração de consciência e hiperglicemia importante.', 'Pode apoiar investigação de osmóis não medidos quando comparada com osmolaridade medida; o gap osmolar exige uma medida laboratorial.'] },
+        { title: 'Como usar', bullets: ['Informe sódio em mEq/L e glicose e ureia em mg/dL, de uma mesma coleta.', 'Use o resultado como estimativa e, quando indicado, compare com osmolaridade medida e calcule o gap osmolar conforme protocolo.'] },
+        { title: 'Como interpretar', bullets: ['Abaixo de 275 mOsm/L: abaixo da faixa de referência do Proped.', '275–295 mOsm/L: dentro da faixa de referência do Proped.', 'Acima de 295 mOsm/L: acima da faixa; avalie sódio, glicose, ureia, hidratação e possível contribuição de osmóis não medidos.', 'A tonicidade efetiva é 2 × Na⁺ + glicose/18; não inclui ureia.'] },
+        { title: 'Pontos de atenção', bullets: ['A osmolaridade calculada não é igual à osmolaridade medida; suspeita de tóxicos ou discrepância clínica requer avaliação apropriada.', 'Hiperlipidemia ou hiperproteinemia podem interferir na medida do sódio; confira método e contexto.', 'A velocidade de correção de distúrbios de sódio e glicose exige monitorização e protocolo clínico; este valor isolado não orienta tratamento.'] },
+      ],
+      references: [{ label: 'Proped — Osmolaridade Plasmática', url: 'https://proped.app/calculadoras/osmolaridade' }, { label: 'Worthley et al. — fórmula de osmolaridade (1987)', url: 'https://doi.org/10.1177/0310057X8701500214' }],
+    },
+    calculate: v => {
+      const sodiumTerm = 2 * v.na, glucoseTerm = v.glucose / 18, ureaTerm = v.urea / 6;
+      const value = sodiumTerm + glucoseTerm + ureaTerm;
+      const tonicity = sodiumTerm + glucoseTerm;
+      const status = value < 275 ? 'Abaixo da referência' : value > 295 ? 'Acima da referência' : 'Normal';
+      return { clinical: { label: 'Osmolaridade plasmática', value: clinicalNumber.format(value), unit: 'mOsm/L', reference: '275–295 mOsm/L', status, tone: value < 275 || value > 295 ? 'out' : 'normal', scale: { value, min: 250, max: 320, low: 275, high: 295 }, formula: '2 × Na⁺ + glicose/18 + ureia/6', memory: [`2 × Na⁺: 2 × ${number.format(v.na)} = ${clinicalNumber.format(sodiumTerm)}`, `Glicose ÷ 18: ${number.format(v.glucose)} ÷ 18 = ${clinicalNumber.format(glucoseTerm)}`, `Ureia ÷ 6: ${number.format(v.urea)} ÷ 6 = ${clinicalNumber.format(ureaTerm)}`, `Total: ${clinicalNumber.format(value)} mOsm/L`, `Tonicidade efetiva (sem ureia): ${clinicalNumber.format(tonicity)} mOsm/L`] } };
+    },
   },
   'sodio-corrigido-hiperglicemia': {
     title: 'Sódio Corrigido — Hiperglicemia', category: 'Hidroeletrolítico',
-    fields: [{ id: 'na', label: 'Sódio medido', unit: 'mEq/L' }, { id: 'glucose', label: 'Glicose', unit: 'mg/dL' }],
+    fields: [{ id: 'na', label: 'Sódio sérico (Na⁺)', unit: 'mEq/L', hint: 'Faixa aceita: 100–200' }, { id: 'glucose', label: 'Glicemia', unit: 'mg/dL', hint: 'Faixa aceita: 30–1000' }],
     formula: 'Estimativa exibida: Na medido + 0,016 × (glicose − 100), com glicose em mg/dL.',
-    source: { label: 'ISPAD — cetoacidose diabética pediátrica', url: 'https://www.ispad.org/static/6dd62eae-c8cb-4b4a-84e1efc768505746/Ch11PediatricDiabetes.pdf' },
-    calculate: v => ({ lines: [`Sódio corrigido estimado: ${number.format(v.na + 0.016 * (v.glucose - 100))} mEq/L.`], warning: 'A fórmula de correção varia entre referências. Avalie tendência seriada e protocolo vigente; este valor isolado não orienta reposição.' }),
+    clinicalGuide: {
+      reference: '135–145 mEq/L (faixa exibida pelo Proped para pediatria; confira o laboratório local).',
+      sections: [
+        { title: 'O que é', paragraphs: ['Na hiperglicemia, a glicose extracelular desloca água para o espaço extracelular e pode reduzir temporariamente o sódio medido. O cálculo estima o sódio ajustado para glicemia de 100 mg/dL.'] },
+        { title: 'Quando usar', bullets: ['Na interpretação do sódio durante hiperglicemia, inclusive em cetoacidose diabética e estado hiperglicêmico.', 'Ajuda a distinguir hiponatremia translocacional de possível hiponatremia concomitante; não escolhe solução nem velocidade de correção.'] },
+        { title: 'Como usar', bullets: ['Informe sódio medido em mEq/L e glicemia em mg/dL da mesma coleta.', 'Esta calculadora usa a fórmula do Proped: Na corrigido = Na medido + 0,016 × (glicemia − 100).'] },
+        { title: 'Como interpretar', bullets: ['Compare com a faixa pediátrica exibida e com a referência do laboratório.', 'Sódio corrigido baixo pode indicar hiponatremia concomitante; valor elevado pode indicar déficit de água livre, conforme avaliação clínica.', 'Acompanhe medidas seriadas durante o tratamento, pois glicemia e sódio medido mudam ao longo do tempo.'] },
+        { title: 'Pontos de atenção', bullets: ['Há diferentes coeficientes publicados para correção; esta tela mantém o coeficiente 0,016 mostrado pelo Proped. Estudos descrevem resultados diferentes, em especial com glicemias muito elevadas.', 'Pseudo-hiponatremia por hiperlipidemia ou hiperproteinemia não é corrigida por esta fórmula.', 'Use protocolo pediátrico vigente para decisões terapêuticas e monitorização; o resultado isolado não define reposição de sódio.'] },
+      ],
+      references: [{ label: 'Proped — Sódio Corrigido pela Hiperglicemia', url: 'https://proped.app/calculadoras/sodio-hiperglicemia' }, { label: 'ISPAD — diretriz de cetoacidose diabética pediátrica', url: 'https://www.ispad.org/static/6dd62eae-c8cb-4b4a-84e1efc768505746/Ch11PediatricDiabetes.pdf' }, { label: 'Hillier et al. — fator de correção para hiperglicemia (1999)', url: 'https://pubmed.ncbi.nlm.nih.gov/10225241/' }],
+    },
+    calculate: v => {
+      const correction = 0.016 * (v.glucose - 100), value = v.na + correction;
+      const status = value < 135 ? 'Sódio corrigido abaixo da faixa normal' : value > 145 ? 'Sódio corrigido acima da faixa normal' : 'Sódio corrigido dentro da faixa normal';
+      return { clinical: { label: 'Resultado · Sódio corrigido', value: clinicalNumber.format(value), unit: 'mEq/L', reference: '135–145 mEq/L', status, tone: value < 135 || value > 145 ? 'out' : 'normal', formula: 'Na⁺ corrigido = Na⁺ medido + 0,016 × (glicemia − 100)', memory: `${number.format(v.na)} + 0,016 × (${number.format(v.glucose)} − 100) = ${clinicalNumber.format(value)} mEq/L` } };
+    },
   },
   'calcio-corrigido-albumina': {
     title: 'Cálcio Corrigido — Albumina', category: 'Hidroeletrolítico',
@@ -309,6 +347,7 @@ const CALCULATOR_IMPLEMENTATIONS = {
 };
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const number = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 });
+const clinicalNumber = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const monthFormat = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' });
 const longDateFormat = new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 const shortDateFormat = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -1008,7 +1047,7 @@ function openCalculator(id) {
     document.getElementById('calculatorDialog').showModal();
     return;
   }
-  document.getElementById('dynamicCalculatorFormula').hidden = false;
+  document.getElementById('dynamicCalculatorFormula').hidden = Boolean(calculator.clinicalGuide);
   document.getElementById('dynamicCalculatorFields').classList.remove('hydration-calculator-fields');
   document.getElementById('calculateDynamicCalculator').hidden = false;
   document.getElementById('calculateDynamicCalculator').textContent = 'Calcular';
@@ -1017,7 +1056,7 @@ function openCalculator(id) {
     const input = field.options
       ? `<select data-calculator-input="${escapeHtml(field.id)}"><option value="">Selecione</option>${field.options.map(option => `<option value="${escapeHtml(option.value)}">${escapeHtml(option.label)}</option>`).join('')}</select>`
       : `<input type="${field.type || 'number'}" ${field.type === 'date' ? '' : 'step="any"'} data-calculator-input="${escapeHtml(field.id)}" ${field.optional ? '' : 'required'}>`;
-    return `<label>${escapeHtml(field.label)}${field.optional ? ' <span class="unit">opcional</span>' : ''}<span class="unit">${escapeHtml(field.unit)}</span>${input}</label>`;
+    return `<label>${escapeHtml(field.label)}${field.optional ? ' <span class="unit">opcional</span>' : ''}<span class="unit">${escapeHtml(field.unit)}</span>${input}${field.hint ? `<small class="calculator-field-hint">${escapeHtml(field.hint)}</small>` : ''}</label>`;
   }).join('');
   const source = document.getElementById('dynamicCalculatorSource');
   if (calculator.source) {
@@ -1026,6 +1065,7 @@ function openCalculator(id) {
     source.hidden = false;
   } else { source.hidden = true; }
   document.getElementById('dynamicCalculatorResult').classList.add('hidden');
+  document.getElementById('dynamicCalculatorResult').classList.remove('clinical-result');
   document.getElementById('dynamicCalculatorResult').replaceChildren();
   document.getElementById('calculatorDialog').showModal();
 }
@@ -1220,6 +1260,18 @@ function calculateHydration(silent = false) {
   const doseSummary = ionMeta.filter(ion => ions[ion.key].enabled).map(ion => `${ion.symbol}:${nf(d[ion.key].dose)}${ion.key === 'ca' ? ` ${d.ca.unit === 'meq' ? 'mEq' : d.ca.unit === 'mgCa' ? 'mg Ca' : 'mg glucon.'}` : ''}`).join(' ');
   document.getElementById('hvPrescription').innerHTML = `<div class="hv-copy-block"><small>RESUMO</small><b>HV TH ${nf(rate)} mL/kg/dia · ${doseSummary} · IV a ${nf(totalMl / 24)} mL/h</b></div><div class="hv-copy-block"><small>MODO DE PREPARO</small><b>SG${d.base}%: ${nf(glucoseStockMl)} mL + AD: ${nf(Math.max(0, waterMl))} mL + ${preparedIons.map(ion => `${ion.label} ${nf(ion.volume)} mL`).join(' + ')} · Volume total: ${nf(totalMl)} mL</b></div>`;
 }
+function renderClinicalCalculatorResult(result, guide) {
+  const memory = Array.isArray(result.memory) ? result.memory : [result.memory];
+  const scale = result.scale ? (() => {
+    const { value, min, max, low, high } = result.scale;
+    const pct = Math.max(0, Math.min(100, (value - min) / (max - min) * 100));
+    const lowPct = (low - min) / (max - min) * 100;
+    const highPct = (high - min) / (max - min) * 100;
+    return `<div class="clinical-scale"><div class="clinical-scale-bar"><span class="clinical-scale-low" style="width:${lowPct}%"></span><span class="clinical-scale-normal" style="left:${lowPct}%;width:${highPct - lowPct}%"></span><span class="clinical-scale-high" style="left:${highPct}%;width:${100 - highPct}%"></span><i style="left:${pct}%"></i></div><div><span>&lt; ${low} Hipo</span><strong>${low}–${high} Normal</strong><span>&gt; ${high} Hiper</span></div></div>`;
+  })() : '';
+  const guideHtml = `<details class="clinical-guide"><summary><span><small>SOBRE O MÉTODO</small><strong>Guia clínico completo</strong></span><i aria-hidden="true"></i></summary><div class="clinical-guide-content">${guide.sections.map(section => `<section><h4>${escapeHtml(section.title)}</h4>${(section.paragraphs || []).map(paragraph => `<p>${escapeHtml(paragraph)}</p>`).join('')}${section.bullets?.length ? `<ul>${section.bullets.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>` : ''}</section>`).join('')}<section><h4>Referências</h4><ul>${guide.references.map(reference => `<li><a href="${escapeHtml(reference.url)}" target="_blank" rel="noopener">${escapeHtml(reference.label)} ↗</a></li>`).join('')}</ul></section></div></details>`;
+  return `<div class="clinical-result-top"><div><small>${escapeHtml(result.label)}</small><div><strong>${escapeHtml(result.value)}</strong><span>${escapeHtml(result.unit)}</span></div></div><div class="clinical-status clinical-status-${escapeHtml(result.tone)}">${escapeHtml(result.status)}</div></div><div class="clinical-reference"><span>Referência pediátrica: ${escapeHtml(result.reference)}</span></div>${scale}<div class="clinical-formula"><strong>Fórmula</strong><span>${escapeHtml(result.formula)}</span><small>Memória de cálculo</small>${memory.map(line => `<p>${escapeHtml(line)}</p>`).join('')}</div>${guideHtml}<p class="clinical-result-caution">Estimativa de apoio clínico. Interprete com quadro clínico, método do laboratório e protocolo pediátrico local.</p>`;
+}
 function calculateActiveCalculator() {
   if (!activeCalculator) return;
   if (activeCalculator.title === 'Hidratação Venosa') return calculateHydration(false);
@@ -1235,7 +1287,13 @@ function calculateActiveCalculator() {
     }
     const result = activeCalculator.calculate(values);
     const box = document.getElementById('dynamicCalculatorResult');
-    box.innerHTML = `<strong>Resultado</strong><ul>${result.lines.map(line => `<li>${escapeHtml(line)}</li>`).join('')}</ul>${result.warning ? `<small class="result-warning">${escapeHtml(result.warning)}</small>` : ''}`;
+    if (result.clinical && activeCalculator.clinicalGuide) {
+      box.innerHTML = renderClinicalCalculatorResult(result.clinical, activeCalculator.clinicalGuide);
+      box.classList.add('clinical-result');
+    } else {
+      box.classList.remove('clinical-result');
+      box.innerHTML = `<strong>Resultado</strong><ul>${result.lines.map(line => `<li>${escapeHtml(line)}</li>`).join('')}</ul>${result.warning ? `<small class="result-warning">${escapeHtml(result.warning)}</small>` : ''}`;
+    }
     box.classList.remove('hidden');
   } catch (error) {
     showToast(error.message || 'Confira os valores informados.');
