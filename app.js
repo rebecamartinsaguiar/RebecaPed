@@ -1164,11 +1164,13 @@ function applyAuthSession(session) {
     beginCloudBootstrap(session.user);
   }
   const loadingCloud = signedIn && cloudPhase === 'loading' && !changingPassword;
-  authGate.hidden = signedIn && !changingPassword && !loadingCloud;
-  appShell.hidden = !signedIn || changingPassword || loadingCloud;
-  document.getElementById('authForm').hidden = changingPassword || loadingCloud;
+  // Open the app as soon as authentication succeeds. The local snapshot is
+  // already available; cloud reconciliation can finish in the background.
+  authGate.hidden = signedIn && !changingPassword;
+  appShell.hidden = !signedIn || changingPassword;
+  document.getElementById('authForm').hidden = changingPassword;
   document.getElementById('authPasswordRecoveryForm').hidden = !changingPassword;
-  document.getElementById('authLoading').hidden = !loadingCloud;
+  document.getElementById('authLoading').hidden = true;
   document.getElementById('authSignOut').hidden = !signedIn;
   if (signedIn && !changingPassword && !loadingCloud) showAuthMessage('');
   updateCloudButtons();
