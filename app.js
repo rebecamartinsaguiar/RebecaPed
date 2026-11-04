@@ -419,6 +419,7 @@ let calculatorSearch = '';
 let activeCalculator = null;
 let hydrationDraft = {
   weight: '', rate: '', glucoseMode: 'tig', glucose: '', glucoseValues: { tig: '', grams: '' }, electrolyteMode: 'dose', base: '5',
+  referencesOpen: false, referenceTab: 'term',
   na: { dose: '3', presentation: 'nacl10', enabled: true },
   k: { dose: '1.5', presentation: 'kcl10', enabled: true },
   ca: { dose: '0.5', unit: 'meq', presentation: 'ca10', enabled: false },
@@ -1037,6 +1038,16 @@ function renderHydrationCalculator() {
     mg: { label: 'Magnésio', symbol: 'Mg', doses: ['mg50', 'mg10'], default: 'mg10', options: [['mg50', 'MgSO₄ 50%'], ['mg10', 'MgSO₄ 10%']] },
   };
   const modeButtons = (kind, current, choices) => `<div class="hv-switch" role="group">${choices.map(([value, label]) => `<button type="button" class="${current === value ? 'active' : ''}" data-hv-mode="${kind}" data-mode="${value}" aria-pressed="${current === value}">${label}</button>`).join('')}</div>`;
+  const referenceTabs = [['term', 'RN termo'], ['preterm', 'RN pré-termo'], ['pediatrics', 'Pediatria']];
+  const referenceRates = hydrationDraft.referenceTab === 'term'
+    ? [{ title: '', rows: [['D1', ['60']], ['D2', ['90']], ['D3', ['100', '120']], ['D4+', ['100', '120']]] }]
+    : hydrationDraft.referenceTab === 'preterm'
+      ? [
+        { title: '>1500 g', note: 'Faixa de referência mais conservadora', rows: [['D1', ['60', '80']], ['D2', ['80', '100']], ['D3', ['100', '120']], ['D4+', ['120', '140']]] },
+        { title: '<1500 g', note: 'Faixa mais ampla para prematuros menores', rows: [['D1', ['70', '100']], ['D2', ['90', '120']], ['D3', ['110', '140']], ['D4+', ['130', '180']]] },
+      ] : [];
+  const caloricWeightForReferences = (() => { const w = Number(hydrationDraft.weight); return w > 0 ? (Math.min(w, 10) * 100 + Math.min(Math.max(w - 10, 0), 10) * 50 + Math.max(w - 20, 0) * 20) / 100 : 0; })();
+  const referencePanel = hydrationDraft.referencesOpen ? `<div class="hv-reference-panel"><p>Toque em um valor para preencher ${hydrationDraft.referenceTab === 'pediatrics' ? 'o percentual do Holliday' : 'a taxa hídrica'}.</p><div class="hv-reference-tabs">${referenceTabs.map(([value, label]) => `<button type="button" class="${hydrationDraft.referenceTab === value ? 'active' : ''}" data-hv-reference-tab="${value}" aria-pressed="${hydrationDraft.referenceTab === value}">${label}</button>`).join('')}</div>${hydrationDraft.referenceTab === 'pediatrics' ? `<div class="hv-ped-reference"><strong>Percentual do Holliday</strong><p>Depois de informar o peso, confira o volume diário em cada percentual do Holliday e toque na linha que deseja usar.</p>${[[100, 'Criança bem hidratada, sem necessidade de restrição hídrica.'], [80, 'Pode ser usado quando você decide restringir a manutenção de forma mais leve.'], [70, 'Redução moderada da manutenção quando você decide restringir mais do que 80%, mas sem chegar a 50%.'], [50, 'Maior restrição hídrica quando houver retenção hídrica ou risco de hipervolemia.']].map(([pct, note]) => `<button type="button" class="hv-ped-option ${Number(hydrationDraft.rate) === pct ? 'active' : ''}" data-hv-reference-rate="${pct}" data-hv-ped-option="${pct}"><span><strong>${pct}% do Holliday</strong><small>${note}</small></span><span class="hv-ped-volume">${caloricWeightForReferences ? new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 1 }).format(caloricWeightForReferences * pct) + ' mL/dia' : 'Informe o peso'}<small>${pct}%</small></span></button>`).join('')}<div class="hv-ped-reference"><strong>Peso calórico</strong><p>Aqui, o <b>peso calórico</b> é usado como base para Holliday, macronutrientes e eletrólitos.</p><div class="hv-ped-option"><span><strong>Peso calórico calculado</strong><small>Base para Holliday, macro e eletrólitos</small></span><span class="hv-ped-volume" id="hvReferenceCaloricWeight">${caloricWeightForReferences ? new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 1 }).format(caloricWeightForReferences) + ' kg' : 'Informe o peso'}</span></div></div></div>` : `${referenceRates.map(group => `<div class="hv-neonatal-group">${group.title ? `<div class="hv-neonatal-group-title"><strong>${group.title}</strong><small>${group.note}</small></div>` : ''}${group.rows.map(([day, values]) => `<div class="hv-reference-row"><strong>${day}${day === 'D4+' ? '<small> A partir do dia 4</small>' : ''}</strong><span>${values.map(value => `<button type="button" class="${hydrationDraft.rate === value ? 'active' : ''}" data-hv-reference-rate="${value}">${value} mL/kg/dia</button>`).join('')}</span></div>`).join('')}</div>`).join('')}<div class="hv-reference-warning">⚠ Ajuste a referência neonatal ao peso ao nascer, perdas insensíveis, fototerapia, calor radiante e protocolo local.</div>`}</div>` : '';
   const ionCard = (key, config) => {
     const ion = hydrationDraft[key];
     const perConcentration = hydrationDraft.electrolyteMode === 'concentration';
@@ -1052,17 +1063,31 @@ function renderHydrationCalculator() {
   };
   container.innerHTML = `
     <div class="hv-layout">
-      <section class="hv-section"><div class="hv-section-title">1 · BASE HÍDRICA</div><div class="hv-fields two"><label>PESO<input type="number" min="0" step="any" data-hv-input="weight" value="${escapeHtml(hydrationDraft.weight)}" placeholder="Ex: 12,5"><span class="unit">kg</span></label><label>TAXA HÍDRICA PRESCRITA<input type="number" min="0" step="any" data-hv-input="rate" value="${escapeHtml(hydrationDraft.rate)}" placeholder="Ex: 100"><span class="unit">mL/kg/dia</span></label></div><p class="hv-hint" id="hvCaloricHint">Informe peso e taxa hídrica.</p></section>
+      <section class="hv-section"><div class="hv-section-title"><span>1 · BASE HÍDRICA</span><button type="button" class="hv-reference-trigger" data-hv-references aria-expanded="${hydrationDraft.referencesOpen}">▤ Referências <span>${hydrationDraft.referencesOpen ? '⌃' : '⌄'}</span></button></div><div class="hv-fields two"><label>PESO<input type="number" min="0" step="any" data-hv-input="weight" value="${escapeHtml(hydrationDraft.weight)}" placeholder="Ex: 12,5"><span class="unit">kg</span></label><label>${hydrationDraft.referenceTab === 'pediatrics' ? 'PERCENTUAL DO HOLLIDAY' : 'TAXA HÍDRICA PRESCRITA'}<input type="number" min="0" step="any" data-hv-input="rate" value="${escapeHtml(hydrationDraft.rate)}" placeholder="${hydrationDraft.referenceTab === 'pediatrics' ? 'Ex: 80' : 'Ex: 100'}"><span class="unit">${hydrationDraft.referenceTab === 'pediatrics' ? '%' : 'mL/kg/dia'}</span></label></div><p class="hv-hint" id="hvCaloricHint">Informe peso e taxa hídrica.</p>${referencePanel}</section>
       <section class="hv-section"><div class="hv-section-title">2 · GLICOSE ${modeButtons('glucose', hydrationDraft.glucoseMode, [['tig', 'TIG · mg/kg/min'], ['grams', 'Gramas · g/Kcal']])}</div><label class="hv-main-input"><span data-hv-glucose-label>${hydrationDraft.glucoseMode === 'tig' ? 'TIG' : 'GRAMAS POR CALORIA'}</span><input type="number" min="0" step="any" data-hv-input="glucose" value="${escapeHtml(hydrationDraft.glucose)}" placeholder="${hydrationDraft.glucoseMode === 'tig' ? 'Ex: 5' : 'Ex: 1,5'}"><span class="unit">${hydrationDraft.glucoseMode === 'tig' ? 'mg/kg/min' : 'g/Kcal'}</span></label><p class="hv-hint" id="hvGlucoseHint">${hydrationDraft.glucoseMode === 'tig' ? 'Sobre o peso real' : 'Sobre o peso calórico'}</p></section>
       <section class="hv-section"><div class="hv-section-title">3 · ELETRÓLITOS ${modeButtons('electrolyte', hydrationDraft.electrolyteMode, [['dose', 'Por dose · mEq/kg/dia'], ['concentration', 'Por concentração · mEq/L']])}</div><div class="hv-ions">${Object.entries(ionConfig).map(([key, config]) => ionCard(key, config)).join('')}</div></section>
       <section class="hv-section"><div class="hv-section-title">PREPARO DA BOLSA</div>${modeButtons('base', hydrationDraft.base, [['5', 'SG5% + AD'], ['10', 'SG10% + AD'], ['25', 'SG25% + AD'], ['50', 'SG50% + AD']])}<div class="hv-preparation" id="hvPreparation"><p class="empty-state">Preencha peso, taxa hídrica e glicose para visualizar o preparo.</p></div></section>
       <section class="hv-section hv-final"><div class="hv-section-title">VELOCIDADE DE INFUSÃO</div><div id="hvInfusion" class="hv-infusion"></div><div class="hv-section-title">SOLUÇÃO FINAL</div><div id="hvFinal" class="hv-final-grid"></div><div class="hv-section-title">PRESCRIÇÃO PRONTA PARA COPIAR</div><div id="hvPrescription"></div><button type="button" class="button secondary small" id="hvCopy">Copiar tudo</button></section>
-      <details class="hv-references"><summary>Referências</summary><a href="https://proped.app/calculadoras/hidratacao-venosa-direta" target="_blank" rel="noopener">Calculadora de Hidratação Venosa do Proped ↗</a></details>
       <p class="form-hint">Ferramenta de apoio. Confira os valores, as unidades, a compatibilidade dos aditivos e o protocolo do seu serviço antes de prescrever.</p>
     </div>`;
   container.querySelectorAll('[data-hv-input]').forEach(input => input.addEventListener('input', () => {
     hydrationDraft[input.dataset.hvInput] = input.value;
     if (input.dataset.hvInput === 'glucose') hydrationDraft.glucoseValues[hydrationDraft.glucoseMode] = input.value;
+    calculateHydration(true);
+  }));
+  container.querySelector('[data-hv-references]').addEventListener('click', () => {
+    hydrationDraft.referencesOpen = !hydrationDraft.referencesOpen;
+    renderHydrationCalculator();
+    calculateHydration(true);
+  });
+  container.querySelectorAll('[data-hv-reference-tab]').forEach(button => button.addEventListener('click', () => {
+    hydrationDraft.referenceTab = button.dataset.hvReferenceTab;
+    renderHydrationCalculator();
+    calculateHydration(true);
+  }));
+  container.querySelectorAll('[data-hv-reference-rate]').forEach(button => button.addEventListener('click', () => {
+    hydrationDraft.rate = button.dataset.hvReferenceRate;
+    renderHydrationCalculator();
     calculateHydration(true);
   }));
   container.querySelectorAll('[data-hv-ion-input]').forEach(input => input.addEventListener('change', () => {
@@ -1178,6 +1203,9 @@ function calculateHydration(silent = false) {
   const osmolarity = Math.round((2 * (sodiumConc + potassiumConc) + magnesiumConc + 1.5 * calciumConc + glucoseMosm) / 10) * 10;
   const nf = value => new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 1 }).format(value);
   document.getElementById('hvCaloricHint').textContent = `Peso calórico ${nf(caloricWeight)} kg · volume ${nf(totalMl)} mL/dia`;
+  document.querySelectorAll('[data-hv-ped-option]').forEach(node => { node.querySelector('.hv-ped-volume').firstChild.textContent = `${nf(caloricWeight * Number(node.dataset.hvPedOption))} mL/dia`; });
+  const referenceCaloricWeight = document.getElementById('hvReferenceCaloricWeight');
+  if (referenceCaloricWeight) referenceCaloricWeight.textContent = `${nf(caloricWeight)} kg`;
   document.getElementById('hvGlucoseHint').textContent = d.glucoseMode === 'tig' ? `Sobre o peso real · ${nf(glucoseG)} g/dia` : `Sobre o peso calórico · ${nf(glucoseG)} g/dia`;
   for (const ion of Object.values(ions)) {
     const card = document.querySelector(`[data-hv-ion-result="${ion.key}"]`);
