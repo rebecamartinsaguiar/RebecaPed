@@ -1,12 +1,12 @@
 # Catálogo mapeado do Proped
 
-Mapeamento observado na sessão autenticada em 2 de novembro de 2026. Este arquivo registra **opções e categorias**, não copia doses, descrições clínicas, bulas ou algoritmos do produto.
+Mapeamento observado na sessão autenticada em 2 de novembro de 2026. Este arquivo registra **opções e categorias**; consulte os guias e as fontes junto de cada calculadora para o conteúdo clínico.
 
-## Calculadoras: 99 opções em 9 categorias
+## Calculadoras: 98 opções em 9 categorias
 
-### Hidroeletrolítico — 12
+### Hidroeletrolítico — 11
 
-Hidratação Venosa; Ânion Gap; Osmolaridade Plasmática; Potássio Corrigido pelo pH; Sódio Corrigido — Hiperglicemia; Cálcio Corrigido — Albumina; Hipernatremia; Hiponatremia; Hipocalemia; SRO; Holliday-Segar; Reposição de Bicarbonato.
+Hidratação Venosa; Ânion Gap; Osmolaridade Plasmática; Sódio Corrigido — Hiperglicemia; Cálcio Corrigido — Albumina; Hipernatremia; Hiponatremia; Hipocalemia; SRO; Holliday-Segar; Reposição de Bicarbonato.
 
 ### UTI / Emergência — 19
 
@@ -69,3 +69,4 @@ As fichas observadas organizam informações em resumo, indicações, segurança
 - Inserir as 99 calculadoras no catálogo próprio e implementar cada fórmula com referência, limites, unidades e testes clínicos revisados.
 - Criar as 312 opções de medicamento e preencher cada ficha por fonte oficial, com status de revisão visível.
 - Guardar protocolos PDF/imagem enviados pela usuária em bucket privado; o protótipo atual usa armazenamento local do navegador.
+
