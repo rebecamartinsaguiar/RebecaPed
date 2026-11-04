@@ -417,6 +417,13 @@ let toastTimer;
 let selectedCalculatorCategory = CALCULATOR_CATEGORIES[0];
 let calculatorSearch = '';
 let activeCalculator = null;
+let hydrationDraft = {
+  weight: '', rate: '', glucoseMode: 'tig', glucose: '', glucoseValues: { tig: '', grams: '' }, electrolyteMode: 'dose', base: '5',
+  na: { dose: '3', presentation: 'nacl10', enabled: true },
+  k: { dose: '1.5', presentation: 'kcl10', enabled: true },
+  ca: { dose: '0.5', unit: 'meq', presentation: 'ca10', enabled: false },
+  mg: { dose: '0.3', presentation: 'mg10', enabled: true },
+};
 
 function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
@@ -990,6 +997,20 @@ function openCalculator(id) {
   if (!calculator) return;
   activeCalculator = calculator;
   document.getElementById('dynamicCalculatorTitle').textContent = calculator.title;
+  if (id === 'hidratacao-venosa') {
+    document.getElementById('dynamicCalculatorFormula').hidden = true;
+    document.getElementById('dynamicCalculatorFields').classList.add('hydration-calculator-fields');
+    document.getElementById('calculateDynamicCalculator').hidden = true;
+    document.getElementById('dynamicCalculatorResult').classList.add('hidden');
+    document.getElementById('dynamicCalculatorSource').hidden = true;
+    renderHydrationCalculator();
+    document.getElementById('calculatorDialog').showModal();
+    return;
+  }
+  document.getElementById('dynamicCalculatorFormula').hidden = false;
+  document.getElementById('dynamicCalculatorFields').classList.remove('hydration-calculator-fields');
+  document.getElementById('calculateDynamicCalculator').hidden = false;
+  document.getElementById('calculateDynamicCalculator').textContent = 'Calcular';
   document.getElementById('dynamicCalculatorFormula').textContent = calculator.formula;
   document.getElementById('dynamicCalculatorFields').innerHTML = calculator.fields.map(field => {
     const input = field.options
@@ -1007,8 +1028,173 @@ function openCalculator(id) {
   document.getElementById('dynamicCalculatorResult').replaceChildren();
   document.getElementById('calculatorDialog').showModal();
 }
+function renderHydrationCalculator() {
+  const container = document.getElementById('dynamicCalculatorFields');
+  const ionConfig = {
+    na: { label: 'Sódio', symbol: 'Na', doses: ['nacl20', 'nacl10', 'nacl09'], default: 'nacl10', options: [['nacl20', 'NaCl 20%'], ['nacl10', 'NaCl 10%'], ['nacl09', 'NaCl 0,9%']] },
+    k: { label: 'Potássio', symbol: 'K', doses: ['kcl191', 'kcl10'], default: 'kcl10', options: [['kcl191', 'KCl 19,1%'], ['kcl10', 'KCl 10%']] },
+    ca: { label: 'Cálcio', symbol: 'Ca', doses: ['ca10'], default: 'ca10', options: [['ca10', 'Gluconato 10%']] },
+    mg: { label: 'Magnésio', symbol: 'Mg', doses: ['mg50', 'mg10'], default: 'mg10', options: [['mg50', 'MgSO₄ 50%'], ['mg10', 'MgSO₄ 10%']] },
+  };
+  const modeButtons = (kind, current, choices) => `<div class="hv-switch" role="group">${choices.map(([value, label]) => `<button type="button" class="${current === value ? 'active' : ''}" data-hv-mode="${kind}" data-mode="${value}" aria-pressed="${current === value}">${label}</button>`).join('')}</div>`;
+  const ionCard = (key, config) => {
+    const ion = hydrationDraft[key];
+    const perConcentration = hydrationDraft.electrolyteMode === 'concentration';
+    const unit = perConcentration ? 'mEq/L' : 'mEq/kg/dia';
+    const dose = key === 'ca' && !perConcentration && ion.unit !== 'meq'
+      ? (ion.unit === 'mgCa' ? 'mg Ca/kg/dia' : 'mg gluconato/kg/dia')
+      : unit;
+    const inputValue = perConcentration ? (ion.concentration || '') : ion.dose;
+    const calciumUnit = key === 'ca' && !perConcentration
+      ? `<div class="hv-ca-units"><span>Dose em</span>${[['meq', 'mEq'], ['mgCa', 'mg Ca'], ['mgGluconate', 'mg glucon.']].map(([value, label]) => `<button type="button" data-hv-ca-unit="${value}" class="${ion.unit === value ? 'active' : ''}">${label}</button>`).join('')}</div>` : '';
+    const doseRange = key === 'na' ? 'Faixa usual: 2–4 mEq/kg/dia' : key === 'k' ? 'Faixa usual: 1–3 mEq/kg/dia' : key === 'ca' ? 'Faixa mostrada pelo Proped: 100–450 mg de gluconato/kg/dia' : 'Faixa usual: 0,2–0,5 mEq/kg/dia';
+    return `<section class="hv-ion-card"><div class="hv-ion-heading"><span class="hv-ion-symbol">${config.symbol}</span><div><strong>${config.label}</strong><small>${doseRange}</small><span class="hv-ion-result" data-hv-ion-result="${key}"></span></div><button type="button" class="hv-toggle ${ion.enabled ? 'selected' : ''}" data-hv-toggle="${key}" aria-pressed="${ion.enabled}" aria-label="${ion.enabled ? 'Incluir' : 'Não incluir'} ${config.label} na composição">${ion.enabled ? '✓' : ''}</button></div><div class="hv-ion-fields"><label>DOSE<input type="number" min="0" step="any" data-hv-ion-input="${key}" data-field="${perConcentration ? 'concentration' : 'dose'}" value="${escapeHtml(String(inputValue))}" placeholder="Informe ${unit}"><span class="unit">${perConcentration ? 'mEq/L' : dose}</span></label><label>APRESENTAÇÃO<select data-hv-ion-input="${key}" data-field="presentation">${config.options.map(([value, label]) => `<option value="${value}" ${(ion.presentation || config.default) === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label></div>${calciumUnit}</section>`;
+  };
+  container.innerHTML = `
+    <div class="hv-layout">
+      <section class="hv-section"><div class="hv-section-title">1 · BASE HÍDRICA</div><div class="hv-fields two"><label>PESO<input type="number" min="0" step="any" data-hv-input="weight" value="${escapeHtml(hydrationDraft.weight)}" placeholder="Ex: 12,5"><span class="unit">kg</span></label><label>TAXA HÍDRICA PRESCRITA<input type="number" min="0" step="any" data-hv-input="rate" value="${escapeHtml(hydrationDraft.rate)}" placeholder="Ex: 100"><span class="unit">mL/kg/dia</span></label></div><p class="hv-hint" id="hvCaloricHint">Informe peso e taxa hídrica.</p></section>
+      <section class="hv-section"><div class="hv-section-title">2 · GLICOSE ${modeButtons('glucose', hydrationDraft.glucoseMode, [['tig', 'TIG · mg/kg/min'], ['grams', 'Gramas · g/Kcal']])}</div><label class="hv-main-input"><span data-hv-glucose-label>${hydrationDraft.glucoseMode === 'tig' ? 'TIG' : 'GRAMAS POR CALORIA'}</span><input type="number" min="0" step="any" data-hv-input="glucose" value="${escapeHtml(hydrationDraft.glucose)}" placeholder="${hydrationDraft.glucoseMode === 'tig' ? 'Ex: 5' : 'Ex: 1,5'}"><span class="unit">${hydrationDraft.glucoseMode === 'tig' ? 'mg/kg/min' : 'g/Kcal'}</span></label><p class="hv-hint" id="hvGlucoseHint">${hydrationDraft.glucoseMode === 'tig' ? 'Sobre o peso real' : 'Sobre o peso calórico'}</p></section>
+      <section class="hv-section"><div class="hv-section-title">3 · ELETRÓLITOS ${modeButtons('electrolyte', hydrationDraft.electrolyteMode, [['dose', 'Por dose · mEq/kg/dia'], ['concentration', 'Por concentração · mEq/L']])}</div><div class="hv-ions">${Object.entries(ionConfig).map(([key, config]) => ionCard(key, config)).join('')}</div></section>
+      <section class="hv-section"><div class="hv-section-title">PREPARO DA BOLSA</div>${modeButtons('base', hydrationDraft.base, [['5', 'SG5% + AD'], ['10', 'SG10% + AD'], ['25', 'SG25% + AD'], ['50', 'SG50% + AD']])}<div class="hv-preparation" id="hvPreparation"><p class="empty-state">Preencha peso, taxa hídrica e glicose para visualizar o preparo.</p></div></section>
+      <section class="hv-section hv-final"><div class="hv-section-title">VELOCIDADE DE INFUSÃO</div><div id="hvInfusion" class="hv-infusion"></div><div class="hv-section-title">SOLUÇÃO FINAL</div><div id="hvFinal" class="hv-final-grid"></div><div class="hv-section-title">PRESCRIÇÃO PRONTA PARA COPIAR</div><div id="hvPrescription"></div><button type="button" class="button secondary small" id="hvCopy">Copiar tudo</button></section>
+      <details class="hv-references"><summary>Referências</summary><a href="https://proped.app/calculadoras/hidratacao-venosa-direta" target="_blank" rel="noopener">Calculadora de Hidratação Venosa do Proped ↗</a></details>
+      <p class="form-hint">Ferramenta de apoio. Confira os valores, as unidades, a compatibilidade dos aditivos e o protocolo do seu serviço antes de prescrever.</p>
+    </div>`;
+  container.querySelectorAll('[data-hv-input]').forEach(input => input.addEventListener('input', () => {
+    hydrationDraft[input.dataset.hvInput] = input.value;
+    if (input.dataset.hvInput === 'glucose') hydrationDraft.glucoseValues[hydrationDraft.glucoseMode] = input.value;
+    calculateHydration(true);
+  }));
+  container.querySelectorAll('[data-hv-ion-input]').forEach(input => input.addEventListener('change', () => {
+    hydrationDraft[input.dataset.hvIonInput][input.dataset.field] = input.value;
+    calculateHydration(true);
+  }));
+  container.querySelectorAll('[data-hv-ion-input][type="number"]').forEach(input => input.addEventListener('input', () => {
+    hydrationDraft[input.dataset.hvIonInput][input.dataset.field] = input.value;
+    calculateHydration(true);
+  }));
+  container.querySelectorAll('[data-hv-mode]').forEach(button => button.addEventListener('click', () => {
+    if (button.dataset.hvMode === 'glucose') {
+      hydrationDraft.glucoseValues[hydrationDraft.glucoseMode] = hydrationDraft.glucose;
+      hydrationDraft.glucoseMode = button.dataset.mode;
+      hydrationDraft.glucose = hydrationDraft.glucoseValues[hydrationDraft.glucoseMode] || '';
+    }
+    else if (button.dataset.hvMode === 'electrolyte') hydrationDraft.electrolyteMode = button.dataset.mode;
+    else hydrationDraft.base = button.dataset.mode;
+    renderHydrationCalculator();
+    calculateHydration(true);
+  }));
+  container.querySelectorAll('[data-hv-ca-unit]').forEach(button => button.addEventListener('click', () => {
+    if (hydrationDraft.ca.unit !== button.dataset.hvCaUnit) hydrationDraft.ca.dose = '';
+    hydrationDraft.ca.unit = button.dataset.hvCaUnit;
+    renderHydrationCalculator();
+    calculateHydration(true);
+  }));
+  container.querySelectorAll('[data-hv-toggle]').forEach(button => button.addEventListener('click', () => {
+    hydrationDraft[button.dataset.hvToggle].enabled = !hydrationDraft[button.dataset.hvToggle].enabled;
+    renderHydrationCalculator();
+    calculateHydration(true);
+  }));
+  document.getElementById('calculateDynamicCalculator').hidden = false;
+  document.getElementById('calculateDynamicCalculator').textContent = 'Calcular hidratação';
+  document.getElementById('hvCopy').addEventListener('click', async () => {
+    const textToCopy = document.getElementById('hvPrescription').innerText;
+    if (!textToCopy.trim()) return showToast('Calcule a hidratação antes de copiar.');
+    try { await navigator.clipboard.writeText(textToCopy); showToast('Preparo copiado.'); }
+    catch { showToast('Não foi possível acessar a área de transferência.'); }
+  });
+  calculateHydration(true);
+}
+function calculateHydration(silent = false) {
+  const d = hydrationDraft;
+  const weight = Number(d.weight), rate = Number(d.rate), glucose = Number(d.glucose);
+  if (!(weight > 0 && rate > 0 && glucose > 0)) {
+    document.getElementById('hvPreparation').innerHTML = '<p class="empty-state">Preencha peso, taxa hídrica e glicose para visualizar o preparo.</p>';
+    document.getElementById('hvInfusion').replaceChildren();
+    document.getElementById('hvFinal').replaceChildren();
+    document.getElementById('hvPrescription').replaceChildren();
+    document.querySelectorAll('.hv-ion-result').forEach(node => { node.textContent = ''; });
+    if (!silent) showToast('Preencha peso, taxa hídrica e glicose para calcular.');
+    return;
+  }
+  const energy = Math.min(weight, 10) * 100 + Math.min(Math.max(weight - 10, 0), 10) * 50 + Math.max(weight - 20, 0) * 20;
+  const caloricWeight = energy / 100;
+  const totalMl = caloricWeight * rate;
+  const totalL = totalMl / 1000;
+  const glucoseG = d.glucoseMode === 'tig' ? glucose * weight * 1.44 : glucose * caloricWeight;
+  const glucosePercent = glucoseG * 100 / totalMl;
+  const stock = { nacl20: 3.4, nacl10: 1.7, nacl09: 0.154, kcl191: 2.56, kcl10: 1.34, ca10: 0.45, mg50: 4.06, mg10: 0.8 };
+  const ionMeta = [
+    { key: 'na', label: 'Sódio', symbol: 'Na', baseUnit: 'mEq', mmol: 2 },
+    { key: 'k', label: 'Potássio', symbol: 'K', baseUnit: 'mEq', mmol: 2 },
+    { key: 'ca', label: 'Cálcio', symbol: 'Ca', baseUnit: 'mEq', mmol: 0 },
+    { key: 'mg', label: 'Magnésio', symbol: 'Mg', baseUnit: 'mEq', mmol: 2 },
+  ];
+  const ions = {};
+  for (const ion of ionMeta) {
+    const item = d[ion.key];
+    if (item.enabled) {
+      const activeValue = ion.key === 'ca' && d.electrolyteMode === 'dose' ? item.dose : (d.electrolyteMode === 'dose' ? item.dose : item.concentration);
+      if (!(Number(activeValue) > 0)) {
+        document.getElementById('hvPreparation').innerHTML = '<p class="empty-state">Preencha as doses dos eletrólitos ativos ou desative os que não entram nesta solução.</p>';
+        document.getElementById('hvInfusion').replaceChildren();
+        document.getElementById('hvFinal').replaceChildren();
+        document.getElementById('hvPrescription').replaceChildren();
+        document.querySelectorAll('.hv-ion-result').forEach(node => { node.textContent = ''; });
+        if (!silent) showToast(`Preencha a dose de ${ion.label} ou desative sua inclusão.`);
+        return;
+      }
+    }
+    let amount;
+    if (ion.key === 'ca' && d.electrolyteMode === 'dose') {
+      const caDose = Number(item.dose || 0) * caloricWeight;
+      amount = item.unit === 'mgCa' ? caDose / 20 : item.unit === 'mgGluconate' ? caDose * 0.0045 : caDose;
+    } else {
+      const value = Number(d.electrolyteMode === 'dose' ? item.dose || 0 : item.concentration || 0);
+      amount = d.electrolyteMode === 'dose' ? value * caloricWeight : value * totalL;
+    }
+    const presentation = item.presentation || (ion.key === 'na' ? 'nacl10' : ion.key === 'k' ? 'kcl10' : ion.key === 'ca' ? 'ca10' : 'mg10');
+    const volume = amount / (stock[presentation] || 1);
+    ions[ion.key] = { ...ion, amount, volume, concentration: amount / totalL, presentation, enabled: item.enabled };
+  }
+  const preparedIons = Object.values(ions).filter(ion => ion.enabled);
+  const glucoseStockMl = glucoseG * 100 / Number(d.base);
+  const additiveMl = preparedIons.reduce((sum, ion) => sum + ion.volume, 0);
+  const waterMl = totalMl - glucoseStockMl - additiveMl;
+  if (waterMl < -0.05) {
+    document.getElementById('hvPreparation').innerHTML = '<p class="empty-state">Os estoques selecionados excedem o volume final. Troque a apresentação ou revise a taxa informada.</p>';
+    document.getElementById('hvInfusion').replaceChildren();
+    document.getElementById('hvFinal').replaceChildren();
+    document.getElementById('hvPrescription').replaceChildren();
+    document.querySelectorAll('.hv-ion-result').forEach(node => { node.textContent = ''; });
+    if (!silent) showToast('O volume dos estoques selecionados excede o volume final. Revise a taxa, o modo de preparo e as apresentações.');
+    return;
+  }
+  const sodiumConc = ions.na.enabled ? ions.na.concentration : 0;
+  const potassiumConc = ions.k.enabled ? ions.k.concentration : 0;
+  const magnesiumConc = ions.mg.enabled ? ions.mg.concentration : 0;
+  const calciumConc = ions.ca.enabled ? ions.ca.concentration : 0;
+  const glucoseMosm = (glucoseG / totalL) / 180 * 1000;
+  const osmolarity = Math.round((2 * (sodiumConc + potassiumConc) + magnesiumConc + 1.5 * calciumConc + glucoseMosm) / 10) * 10;
+  const nf = value => new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 1 }).format(value);
+  document.getElementById('hvCaloricHint').textContent = `Peso calórico ${nf(caloricWeight)} kg · volume ${nf(totalMl)} mL/dia`;
+  document.getElementById('hvGlucoseHint').textContent = d.glucoseMode === 'tig' ? `Sobre o peso real · ${nf(glucoseG)} g/dia` : `Sobre o peso calórico · ${nf(glucoseG)} g/dia`;
+  for (const ion of Object.values(ions)) {
+    const card = document.querySelector(`[data-hv-ion-result="${ion.key}"]`);
+    if (card) card.textContent = `${nf(ion.amount)} mEq/dia · ${nf(ion.volume)} mL${ion.key === 'ca' ? ' · cálculo separado da bolsa' : ''}`;
+  }
+  const baseParts = [`<div><span>SG${d.base}%</span><strong>${nf(glucoseStockMl)} mL</strong></div>`, `<div><span>AD</span><strong>${nf(Math.max(0, waterMl))} mL</strong></div>`];
+  for (const ion of preparedIons) baseParts.push(`<div><span>${escapeHtml(document.querySelector(`[data-hv-ion-input="${ion.key}"][data-field="presentation"]`).selectedOptions[0].textContent)} <small>${nf(ion.amount)} mEq</small></span><strong>${nf(ion.volume)} mL</strong></div>`);
+  baseParts.push(`<div class="hv-total"><span>Total</span><strong>${nf(totalMl)} mL</strong></div>`);
+  document.getElementById('hvPreparation').innerHTML = baseParts.join('');
+  document.getElementById('hvInfusion').innerHTML = `<strong>${nf(totalMl / 24)} <small>mL/h</small></strong><span>${Math.round(totalMl / 24 * 20 / 60)} gts/min · ${nf(totalMl / 24)} micro/min</span>`;
+  document.getElementById('hvFinal').innerHTML = `<div><span>OSMOLARIDADE</span><strong>${nf(osmolarity)} mOsm/L</strong></div><div><span>CONC. DE GLICOSE</span><strong>${nf(glucosePercent)}%</strong></div><div><span>CONC. DE SÓDIO</span><strong>${Math.round(sodiumConc)} mEq/L</strong></div><div><span>CONC. DE POTÁSSIO</span><strong>${Math.round(potassiumConc)} mEq/L</strong></div><div><span>CONC. DE MAGNÉSIO</span><strong>${Math.round(magnesiumConc)} mEq/L</strong></div>${ions.ca.enabled ? `<div><span>CONC. DE CÁLCIO</span><strong>${Math.round(calciumConc)} mEq/L</strong></div>` : ''}`;
+  const doseSummary = ionMeta.filter(ion => ions[ion.key].enabled).map(ion => `${ion.symbol}:${nf(d[ion.key].dose)}${ion.key === 'ca' ? ` ${d.ca.unit === 'meq' ? 'mEq' : d.ca.unit === 'mgCa' ? 'mg Ca' : 'mg glucon.'}` : ''}`).join(' ');
+  document.getElementById('hvPrescription').innerHTML = `<div class="hv-copy-block"><small>RESUMO</small><b>HV TH ${nf(rate)} mL/kg/dia · ${doseSummary} · IV a ${nf(totalMl / 24)} mL/h</b></div><div class="hv-copy-block"><small>MODO DE PREPARO</small><b>SG${d.base}%: ${nf(glucoseStockMl)} mL + AD: ${nf(Math.max(0, waterMl))} mL + ${preparedIons.map(ion => `${ion.label} ${nf(ion.volume)} mL`).join(' + ')} · Volume total: ${nf(totalMl)} mL</b></div>`;
+}
 function calculateActiveCalculator() {
   if (!activeCalculator) return;
+  if (activeCalculator.title === 'Hidratação Venosa') return calculateHydration(false);
   try {
     const values = {};
     for (const field of activeCalculator.fields) {
