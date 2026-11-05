@@ -1,6 +1,16 @@
 # Meu Plantão
 
-MVP local em português, com foco somente nas quatro áreas priorizadas: calculadoras, medicações/bulas, protocolos e calendário/relatório de plantões.
+## Repositório e publicação
+
+- Repositório: `rebecamartinsaguiar/RebecaPed`; produção em https://rebecamartinsaguiar.github.io/RebecaPed/ via GitHub Pages.
+- `main` é produção e `desenvolvimento` é a branch de trabalho. Implementações, correções e verificações devem ocorrer em `desenvolvimento`; integre em `main` por Pull Request após revisão. Não editar `main` diretamente sem autorização expressa.
+- O workflow personalizado `.github/workflows/deploy-pages.yml` publica em pushes para `main` ou por execução manual. Ele prepara `_site` com os arquivos principais, configuração Supabase e `assets/` se existir. Preserve o workflow salvo necessidade técnica explicada.
+- O site está em `/RebecaPed/`, subcaminho do domínio GitHub Pages. Preserve compatibilidade nos caminhos do app, manifest e Service Worker.
+- O projeto é PWA: ao alterar recursos, revise a versão, precache e atualização do Service Worker para impedir que dispositivos mantenham arquivos antigos. Inclua novos arquivos no pacote `_site` se não forem cobertos pelo workflow.
+- Nunca exponha segredo ou chave `service_role` no frontend. Só credenciais públicas apropriadas podem ser usadas no navegador.
+- Antes de concluir mudanças, confira referências, caminhos, dependências, pacote `_site` e compatibilidade com Pages/PWA. No fechamento, informe arquivos alterados, verificações feitas e necessidade de mudança no workflow.
+
+MVP em português, com foco somente nas quatro áreas priorizadas: calculadoras, medicações/bulas, protocolos e calendário/relatório de plantões.
 
 ## Abrir
 
@@ -28,6 +38,6 @@ Fontes oficiais incluídas como atalhos:
 
 O catálogo de escopo observado está em `CATALOGO-MAPEADO.md`. O esquema inicial em `supabase/migrations/001_initial_schema.sql` foi aplicado manualmente pelo SQL Editor ao projeto BecaPed em 02/11/2026. A consulta de verificação encontrou as sete tabelas e o bucket privado `protocol-attachments`. A execução manual não cria uma entrada no histórico de migrações do Supabase CLI. A configuração pública em `supabase-config.js` inicializa o cliente JavaScript, mas não ativa autenticação, sincronização ou envio de anexos; essas operações ainda precisam ser implementadas no frontend.
 
-O Project URL e a chave pública `publishable` estão configurados. Não coloque a chave `service_role` no frontend ou em arquivos versionados. GitHub é opcional para versionamento/deploy; Supabase é necessário para autenticação, banco e armazenamento privado de arquivos.
+O Project URL e a chave pública `publishable` estão configurados. Não coloque a chave `service_role` no frontend ou em arquivos versionados. GitHub mantém o código e publica no Pages; Supabase é necessário para autenticação, banco e armazenamento privado de arquivos.
 
 Este app é uma ferramenta auxiliar e não substitui julgamento clínico, prescrição nem protocolos institucionais.
