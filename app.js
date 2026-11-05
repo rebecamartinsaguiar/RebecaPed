@@ -111,36 +111,93 @@ const CALCULATOR_IMPLEMENTATIONS = {
   },
   'calcio-corrigido-albumina': {
     title: 'Cálcio Corrigido — Albumina', category: 'Hidroeletrolítico',
-    fields: [{ id: 'calcium', label: 'Cálcio total', unit: 'mg/dL' }, { id: 'albumin', label: 'Albumina', unit: 'g/dL' }],
+    fields: [{ id: 'calcium', label: 'Cálcio total', unit: 'mg/dL' }, { id: 'albumin', label: 'Albumina', unit: 'g/dL' }, { id: 'ageGroup', label: 'Faixa etária', unit: '', type: 'select', allowZero: true, options: [{ value: '0', label: 'Recém-nascido' }, { value: '1', label: 'Lactente/criança' }, { value: '2', label: 'Adolescente' }] }],
     formula: 'Estimativa: cálcio total + 0,8 × (4 − albumina). Unidades exigidas: mg/dL e g/dL.',
-    source: { label: 'Endotext — abordagem do cálcio', url: 'https://www.ncbi.nlm.nih.gov/books/NBK279129/' },
-    calculate: v => ({ lines: [`Cálcio corrigido estimado: ${number.format(v.calcium + 0.8 * (4 - v.albumin))} mg/dL.`], warning: 'A correção por albumina pode ser imprecisa, especialmente em pacientes críticos. Considere cálcio ionizado conforme o contexto.' }),
+    clinicalGuide: {
+      reference: 'Recém-nascido: 7,8–11,0; lactente/criança: 8,8–10,8; adolescente: 8,5–10,5 mg/dL (faixas exibidas pelo Proped; confirmar laboratório e idade).',
+      sections: [
+        { title: 'O que é', paragraphs: ['O cálcio total inclui cálcio ionizado, ligado a proteínas e complexado a ânions. A fórmula estima o cálcio total ajustado para albumina de 4 g/dL; não mede o cálcio biologicamente ativo.'] },
+        { title: 'Quando usar', bullets: ['Como estimativa em pacientes com alteração de albumina, interpretada junto ao quadro clínico e ao laboratório.', 'Em paciente crítico, sintomático ou com resultado discordante, prefira cálcio ionizado medido diretamente.'] },
+        { title: 'Como usar', bullets: ['Informe cálcio total em mg/dL, albumina em g/dL, da mesma coleta, e selecione a faixa etária.', 'Compare com a faixa etária selecionada e com o intervalo de referência do laboratório.'] },
+        { title: 'Como interpretar', bullets: ['Resultado abaixo da faixa pode ser compatível com hipocalcemia, mas a correção é apenas estimativa.', 'Resultado dentro ou acima da faixa não substitui avaliação de sintomas, pH, magnésio e cálcio ionizado quando indicado.'] },
+        { title: 'Pontos de atenção', bullets: ['A fórmula pode estimar mal o cálcio em doença crítica, distúrbios de pH, doença renal ou alterações importantes de proteínas.', 'Alcalose reduz o cálcio ionizado e acidose pode elevá-lo sem mudança proporcional do cálcio total.', 'Sintomas neuromusculares ou decisão de tratamento urgente exigem avaliação clínica e, quando disponível, cálcio ionizado.'] },
+      ],
+      references: [{ label: 'Proped — Cálcio Corrigido por Albumina', url: 'https://proped.app/calculadoras/calcio-albumina' }, { label: 'AAP Pediatric Care Online — cálcio e faixas etárias', url: 'https://publications.aap.org/pediatriccare/article/doi/10.1542/aap.ppcqr.396452/238/Hypocalcemia-Hypercalcemia-and-Hypercalciuria' }, { label: 'Endotext — abordagem do cálcio', url: 'https://www.ncbi.nlm.nih.gov/books/NBK279129/' }],
+    },
+    calculate: v => {
+      const value = v.calcium + 0.8 * (4 - v.albumin);
+      const ranges = [{ label: 'Recém-nascido', min: 7.8, max: 11.0 }, { label: 'Lactente/criança', min: 8.8, max: 10.8 }, { label: 'Adolescente', min: 8.5, max: 10.5 }];
+      const age = ranges[v.ageGroup], status = value < age.min ? 'Abaixo da referência etária' : value > age.max ? 'Acima da referência etária' : 'Dentro da referência etária';
+      return { clinical: { label: 'Resultado · Cálcio corrigido', value: clinicalNumber.format(value), unit: 'mg/dL', reference: `${age.label}: ${number.format(age.min)}–${number.format(age.max)} mg/dL`, status, tone: value < age.min || value > age.max ? 'out' : 'normal', formula: 'Ca corrigido = Ca total + 0,8 × (4 − albumina)', memory: `${number.format(v.calcium)} + 0,8 × (4 − ${number.format(v.albumin)}) = ${clinicalNumber.format(value)} mg/dL` } };
+    },
   },
   'hipernatremia': {
     title: 'Hipernatremia — Déficit de Água Livre', category: 'Hidroeletrolítico',
-    fields: [{ id: 'weight', label: 'Peso atual', unit: 'kg' }, { id: 'na', label: 'Sódio medido', unit: 'mEq/L' }, { id: 'targetNa', label: 'Sódio-alvo definido pelo profissional', unit: 'mEq/L' }, { id: 'tbw', label: 'Fração de água corporal total (0–1)', unit: 'L/kg' }],
-    formula: 'Déficit estimado = peso × fração de água corporal × (Na medido/Na-alvo − 1). A fração precisa ser selecionada conforme idade e condição clínica.',
-    source: { label: 'Arkansas Children’s — distúrbios do sódio pediátricos', url: 'https://www.archildrens.org/-/media/Files/for-healthcare-professionals/pediatric-guidelines/Pediatric_Sodium_Disorders.pdf' },
+    fields: [{ id: 'weight', label: 'Peso atual', unit: 'kg' }, { id: 'na', label: 'Sódio atual', unit: 'mEq/L' }, { id: 'targetNa', label: 'Sódio-alvo definido pelo profissional', unit: 'mEq/L' }, { id: 'correctionHours', label: 'Tempo de correção', unit: 'horas', type: 'select', options: [{ value: '24', label: '24 horas (1 dia)' }, { value: '48', label: '48 horas (2 dias)' }, { value: '72', label: '72 horas (3 dias)' }] }],
+    formula: 'Água corporal estimada = peso × 0,6. Déficit (L) = água corporal × (Na atual/Na alvo − 1). Distribuição do déficit pelo tempo escolhido.',
+    clinicalGuide: {
+      reference: 'Sódio pediátrico: 135–145 mEq/L. Hipernatremia leve 146–150; moderada 151–160; grave >160 mEq/L (classificação exibida pelo Proped).',
+      sections: [
+        { title: 'O que é', paragraphs: ['Hipernatremia é Na⁺ sérico acima de 145 mEq/L e geralmente representa excesso relativo de sódio ou déficit de água livre. Esta estimativa usa fator 0,6 para água corporal em crianças e não substitui a avaliação de volume, perdas nem causa.'] },
+        { title: 'Quando usar', bullets: ['Após confirmar hipernatremia em amostra confiável, como estimativa matemática do déficit de água livre.', 'Para apoiar planejamento e discussão clínica junto da manutenção e das perdas em curso.'] },
+        { title: 'Como usar', bullets: ['Informe peso em kg, sódio atual, alvo definido no plano clínico e o tempo de correção.', 'O resultado distribui o déficit estimado pelo tempo escolhido. Manutenção e perdas contínuas não estão incluídas.'] },
+        { title: 'Como interpretar', bullets: ['A classificação exibida é leve 146–150, moderada 151–160 e grave acima de 160 mEq/L.', 'A queda calculada por dia é uma projeção; compare com medidas seriadas e ajuste somente conforme avaliação clínica e protocolo local.', 'As soluções listadas são referências de conteúdo de sódio: SG 5% 0, SF 0,45% 77, SG 5% + SF 0,9% em partes iguais 77 e SF 0,9% 154 mEq/L. A calculadora não seleciona uma solução para o paciente.'] },
+        { title: 'Pontos de atenção', bullets: ['Após restaurar perfusão se houver choque, a correção pediátrica costuma ser limitada a cerca de 0,5 mEq/L/h ou 10–12 mEq/L/dia; hipernatremia grave exige condução especializada.', 'O déficit calculado não inclui manutenção nem perdas em curso e não deve ser usado isoladamente como prescrição de volume.', 'O fator fixo 0,6 representa criança; não aplicar automaticamente a recém-nascido, cuja água corporal é diferente.', 'Monitorize sódio, estado neurológico, balanço hídrico e peso seriados conforme gravidade e protocolo.'] },
+      ],
+      references: [{ label: 'Proped — Hipernatremia', url: 'https://proped.app/calculadoras/hipernatremia' }, { label: 'Royal Children’s Hospital — Hypernatraemia', url: 'https://www.rch.org.au/clinicalguide/guideline_index/Hypernatraemia/' }, { label: 'NICE — fluidoterapia IV em crianças', url: 'https://www.nice.org.uk/guidance/ng29/chapter/recommendations' }],
+    },
     calculate: v => {
-      if (v.na <= v.targetNa) throw new Error('Para estimar déficit de água livre, o sódio medido precisa ser maior que o alvo informado.');
-      return { lines: [`Déficit de água livre estimado: ${number.format(v.weight * v.tbw * (v.na / v.targetNa - 1) * 1000)} mL.`], warning: 'Estimativa teórica; não inclui manutenção nem perdas em curso. A velocidade de correção requer plano clínico e monitorização seriada.' };
+      if (v.na <= 145) throw new Error('O sódio atual informado não está acima do limite de referência de 145 mEq/L para esta estimativa de hipernatremia.');
+      if (v.na <= v.targetNa) throw new Error('Para estimar déficit de água livre, o sódio atual precisa ser maior que o alvo informado.');
+      const bodyWater = v.weight * 0.6, deficitL = bodyWater * (v.na / v.targetNa - 1), deficitMl = deficitL * 1000;
+      const dailyVolume = deficitMl * 24 / v.correctionHours, hourlyVolume = deficitMl / v.correctionHours;
+      const dailyDrop = (v.na - v.targetNa) * 24 / v.correctionHours;
+      const severity = v.na > 160 ? 'Grave' : v.na >= 151 ? 'Moderada' : v.na >= 146 ? 'Leve' : 'Abaixo do limiar de hipernatremia';
+      const status = dailyDrop > 12 ? `${severity} · queda projetada acima de 12 mEq/L/dia` : severity;
+      return { clinical: { label: 'Resultado · Déficit de água livre', value: number.format(Math.round(deficitMl)), unit: 'mL total', reference: 'Na⁺ pediátrico 135–145 mEq/L', status, tone: dailyDrop > 12 || v.na > 160 ? 'out' : 'normal', formula: 'Déficit (L) = peso × 0,6 × (Na atual/Na alvo − 1)', memory: [`ΔNa: ${number.format(v.na)} − ${number.format(v.targetNa)} = ${number.format(v.na - v.targetNa)} mEq/L`, `Água corporal estimada: ${number.format(v.weight)} × 0,6 = ${number.format(bodyWater)} L`, `Déficit: (${number.format(v.na - v.targetNa)}/${number.format(v.targetNa)}) × ${number.format(bodyWater)} = ${clinicalNumber.format(deficitL)} L`, `Tempo selecionado: ${v.correctionHours} h`, `Volume distribuído: ${number.format(Math.round(deficitMl))} mL total · ${number.format(Math.round(dailyVolume))} mL/dia · ${clinicalNumber.format(hourlyVolume)} mL/h`, `Queda projetada: ${clinicalNumber.format(dailyDrop)} mEq/L/dia`], metrics: [{ label: 'Infusão horária', value: `${clinicalNumber.format(hourlyVolume)} mL/h` }, { label: 'Volume por dia', value: `${number.format(Math.round(dailyVolume))} mL/dia` }, { label: 'Queda projetada', value: `${clinicalNumber.format(dailyDrop)} mEq/L/dia` }, { label: 'Déficit total', value: `${clinicalNumber.format(deficitL)} L` }] } };
     },
   },
   'hiponatremia': {
     title: 'Hiponatremia — Déficit de Sódio', category: 'Hidroeletrolítico',
-    fields: [{ id: 'weight', label: 'Peso', unit: 'kg' }, { id: 'na', label: 'Sódio medido', unit: 'mEq/L' }, { id: 'targetNa', label: 'Sódio-alvo definido pelo profissional', unit: 'mEq/L' }, { id: 'tbw', label: 'Fração de água corporal total (0–1)', unit: 'L/kg' }],
-    formula: 'Estimativa matemática: (Na-alvo − Na medido) × peso × fração de água corporal. O alvo e a fração devem vir do plano clínico.',
-    source: { label: 'Arkansas Children’s — distúrbios do sódio pediátricos', url: 'https://www.archildrens.org/-/media/Files/for-healthcare-professionals/pediatric-guidelines/Pediatric_Sodium_Disorders.pdf' },
+    fields: [{ id: 'weight', label: 'Peso', unit: 'kg' }, { id: 'na', label: 'Sódio atual', unit: 'mEq/L' }, { id: 'targetNa', label: 'Sódio-alvo definido pelo profissional', unit: 'mEq/L' }, { id: 'correctionHours', label: 'Tempo de correção', unit: 'horas', type: 'number', hint: 'Informe o tempo em horas, conforme plano clínico.' }],
+    formula: 'Déficit de Na⁺ (mEq) = (Na alvo − Na atual) × peso × 0,6. Volume teórico de NaCl 3% (mL) = déficit ÷ 0,513 mEq/mL.',
+    clinicalGuide: {
+      reference: 'Sódio pediátrico: 135–145 mEq/L. Leve 130–134; moderada 125–129; grave <125 mEq/L (classificação exibida pelo Proped).',
+      sections: [
+        { title: 'O que é', paragraphs: ['Hiponatremia é Na⁺ sérico abaixo de 135 mEq/L. A estimativa mostrada calcula a diferença de sódio até o alvo informado e o volume teórico de NaCl 3% correspondente; não determina indicação, bolus ou velocidade apropriada.'] },
+        { title: 'Quando usar', bullets: ['Como apoio matemático quando a equipe já definiu um alvo e plano de reposição.', 'A avaliação exige sintomas, tonicidade/osmolaridade, volemia, causa, duração, glicemia e perdas.'] },
+        { title: 'Como usar', bullets: ['Informe peso, Na⁺ atual, Na⁺ alvo e tempo em horas conforme o plano clínico.', 'Confira a memória de cálculo, a quantidade estimada e o preparo teórico por uma das duas misturas exibidas.'] },
+        { title: 'Como interpretar', bullets: ['O resultado não é uma recomendação automática de administrar todo o volume calculado.', 'NaCl 3% contém aproximadamente 0,513 mEq de Na⁺ por mL. As duas opções de preparo exibem a composição matemática correspondente.', 'A velocidade em mEq/L/h e a projeção em 24 horas devem ser avaliadas considerando sintomas, cronicidade e monitorização.'] },
+        { title: 'Pontos de atenção', bullets: ['Em criança sem convulsão, a diretriz RCH recomenda que a correção não exceda 8 mmol/L em 24 horas; protocolos locais podem diferir conforme contexto e gravidade.', 'Convulsão ou alteração importante de consciência é emergência e requer protocolo próprio; esta estimativa não calcula bolus de resgate.', 'Correção excessiva pode causar desmielinização osmótica. NaCl 3% é medicamento de alta vigilância: dupla checagem, bomba e dosagens seriadas conforme protocolo.', 'O fator 0,6 é a aproximação usada pelo Proped; recém-nascidos podem ter proporção de água corporal diferente.'] },
+      ],
+      references: [{ label: 'Proped — Hiponatremia', url: 'https://proped.app/calculadoras/hiponatremia' }, { label: 'Royal Children’s Hospital — Hyponatraemia', url: 'https://www.rch.org.au/clinicalguide/guideline_index/hyponatraemia/' }, { label: 'Verbalis et al. — expert panel recommendations', url: 'https://doi.org/10.1016/j.amjmed.2013.07.006' }],
+    },
     calculate: v => {
+      if (v.na >= 135) throw new Error('O sódio atual informado não está abaixo de 135 mEq/L, limite usual para hiponatremia.');
       if (v.targetNa <= v.na) throw new Error('O sódio-alvo informado deve ser maior que o sódio medido.');
-      return { lines: [`Diferença matemática estimada: ${number.format((v.targetNa - v.na) * v.weight * v.tbw)} mEq de sódio.`], warning: 'Não converte automaticamente em volume de solução e não define correção segura. Considere sintomas, cronicidade, perdas e protocolo institucional.' };
+      const delta = v.targetNa - v.na, deficit = delta * v.weight * 0.6, volume = deficit / 0.513;
+      const hours = v.correctionHours, rate = volume / hours, sodiumRate = delta / hours, dailyCorrection = delta * 24 / hours;
+      const nacl20 = volume * (0.513 - 0.154) / (3.4 - 0.154), saline09 = volume - nacl20;
+      const nacl20Water = volume * 0.513 / 3.4, sterileWater = volume - nacl20Water;
+      const severity = v.na < 125 ? 'Grave' : v.na < 130 ? 'Moderada' : v.na < 135 ? 'Leve' : 'Sódio dentro da faixa';
+      const status = dailyCorrection > 8 ? `${severity} · projeção >8 mEq/L/24 h` : severity;
+      return { clinical: { label: 'Resultado · Volume teórico de NaCl 3%', value: clinicalNumber.format(volume), unit: 'mL', reference: 'Na⁺ pediátrico 135–145 mEq/L', status, tone: dailyCorrection > 8 || v.na < 125 ? 'out' : 'normal', formula: 'Déficit (mEq) = ΔNa × peso × 0,6; volume NaCl 3% = déficit ÷ 0,513', memory: [`Incremento-alvo (ΔNa): ${number.format(v.targetNa)} − ${number.format(v.na)} = ${number.format(delta)} mEq/L`, `Déficit teórico: ${number.format(delta)} × ${number.format(v.weight)} × 0,6 = ${number.format(deficit)} mEq`, `Volume NaCl 3%: ${number.format(deficit)} ÷ 0,513 = ${clinicalNumber.format(volume)} mL`, `Tempo informado: ${number.format(hours)} h · taxa volumétrica: ${clinicalNumber.format(rate)} mL/h`, `Velocidade de correção: ${number.format(sodiumRate)} mEq/L/h · projeção em 24 h: ${number.format(dailyCorrection)} mEq/L`], metrics: [{ label: 'Déficit estimado de Na⁺', value: `${number.format(deficit)} mEq` }, { label: 'Taxa de infusão', value: `${clinicalNumber.format(rate)} mL/h` }, { label: 'Correção projetada', value: `${number.format(sodiumRate)} mEq/L/h · ${number.format(dailyCorrection)} mEq/L/24 h` }, { label: 'Preparo 1 · NaCl 20% + SF 0,9%', value: `${clinicalNumber.format(nacl20)} mL + ${clinicalNumber.format(saline09)} mL` }, { label: 'Preparo 2 · NaCl 20% + água estéril', value: `${clinicalNumber.format(nacl20Water)} mL + ${clinicalNumber.format(sterileWater)} mL` }], caution: 'Estimativa matemática, não prescrição. Revise limite de correção, sintomas, concentração final, acesso e monitorização com protocolo pediátrico local.' } };
     },
   },
   'hipocalemia': {
     title: 'Hipocalemia — Reposição de KCl', category: 'Hidroeletrolítico',
-    fields: [{ id: 'weight', label: 'Peso', unit: 'kg' }, { id: 'dose', label: 'Dose prescrita', unit: 'mEq/kg' }, { id: 'concentration', label: 'Concentração da apresentação', unit: 'mEq/mL' }],
-    formula: 'Converte apenas a dose prescrita: mEq totais = dose × peso; volume = mEq totais/concentração. Não sugere dose, diluição ou velocidade.',
-    calculate: v => ({ lines: [`Quantidade prescrita: ${number.format(v.weight * v.dose)} mEq.`, `Volume correspondente à concentração informada: ${number.format(v.weight * v.dose / v.concentration)} mL.`], warning: 'Confirme concentração, via, diluição, velocidade, função renal e monitorização no protocolo institucional. Nunca administrar KCl concentrado sem diluição apropriada.' }),
+    clinicalGuide: {
+      reference: 'K⁺ sérico ≥3,5 mEq/L como limite inferior usual; confirme intervalo do laboratório e idade.',
+      sections: [
+        { title: 'O que é', paragraphs: ['Hipocalemia é potássio sérico abaixo de 3,5 mEq/L. Pode decorrer de perdas gastrointestinais ou renais, redistribuição, baixa ingestão ou hipomagnesemia. A calculadora converte parâmetros informados em quantidades e volumes.'] },
+        { title: 'Quando usar', bullets: ['Após confirmar K⁺ em amostra adequada, para conferir a matemática de um plano de reposição oral ou EV já definido.', 'Hipocalemia grave, sintomas ou alterações de ECG requerem avaliação urgente e protocolo clínico específico.'] },
+        { title: 'Como usar', bullets: ['Informe peso e potássio sérico e selecione via oral ou endovenosa.', 'Via EV: informe dose em mEq/kg/h, duração, concentração final e apresentação de KCl; o cálculo mostra quantidade, diluente e bomba.', 'Via oral: informe dose diária em mEq/kg/dia, número de tomadas e concentração do produto; o cálculo mostra volume por tomada.', 'Esta calculadora não solicita nem usa seleção de ambiente de reposição.'] },
+        { title: 'Como interpretar', bullets: ['A classificação exibida pelo Proped é 3,0–3,4 mEq/L leve, 2,5–2,9 moderada e abaixo de 2,5 grave; abaixo de 2,0 é crítica em diretrizes pediátricas.', 'A via oral/enteral costuma ser preferida se tolerada; via EV é considerada quando não há tolerância enteral, K⁺ é muito baixo ou há alterações de ECG.', 'Na reposição EV, confira taxa, concentração, volume, produto e acesso. O resultado não escolhe dose nem ambiente de cuidado.'] },
+        { title: 'Pontos de atenção', bullets: ['KCl EV é medicamento de alta vigilância: usar bomba de infusão, dupla checagem e nunca administrar em bolus.', 'Avalie função renal e diurese; monitorize ECG conforme gravidade e protocolo; confira K⁺ após reposição antes de redosar.', 'Hipomagnesemia pode manter hipocalemia refratária; equilíbrio ácido-base e insulina também alteram o potássio sérico.', 'Considere todas as fontes de potássio recebidas e o risco de sobrecarga de volume.'] },
+      ],
+      references: [{ label: 'Proped — Hipocalemia', url: 'https://proped.app/calculadoras/hipocalemia' }, { label: 'Royal Children’s Hospital — Hypokalaemia', url: 'https://www.rch.org.au/clinicalguide/guideline_index/hypokalaemia/' }, { label: 'ANVISA — Bulário Eletrônico', url: 'https://consultas.anvisa.gov.br/#/bulario/' }],
+    },
+    calculate: () => { throw new Error('Use os campos de reposição oral ou endovenosa.'); },
   },
   'sro': {
     title: 'SRO — Volume prescrito por peso', category: 'Hidroeletrolítico',
@@ -457,13 +514,14 @@ let selectedCalculatorCategory = CALCULATOR_CATEGORIES[0];
 let calculatorSearch = '';
 let activeCalculator = null;
 let hydrationDraft = {
-  weight: '', rate: '', glucoseMode: 'tig', glucose: '', glucoseValues: { tig: '', grams: '' }, electrolyteMode: 'dose', base: '5',
+  weight: '', rate: '', glucoseMode: 'tig', glucose: '', glucoseValues: { tig: '', grams: '' }, electrolyteMode: 'dose', base: '5+50',
   referencesOpen: false, referenceTab: 'term',
   na: { dose: '3', presentation: 'nacl10', enabled: true },
   k: { dose: '1.5', presentation: 'kcl10', enabled: true },
   ca: { dose: '0.5', unit: 'meq', presentation: 'ca10', enabled: false },
   mg: { dose: '0.3', presentation: 'mg10', enabled: true },
 };
+let hypokalemiaDraft = { weight: '', potassium: '', route: 'iv', dose: '', time: '6', finalConcentration: '12', kclPresentation: 'kcl10', frequency: '4', oralConcentration: '1.33' };
 
 function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
@@ -1039,6 +1097,7 @@ function openCalculator(id) {
   document.getElementById('dynamicCalculatorTitle').textContent = calculator.title;
   if (id === 'hidratacao-venosa') {
     document.getElementById('dynamicCalculatorFormula').hidden = true;
+    document.getElementById('dynamicCalculatorFields').classList.remove('hypokalemia-calculator-fields');
     document.getElementById('dynamicCalculatorFields').classList.add('hydration-calculator-fields');
     document.getElementById('calculateDynamicCalculator').hidden = true;
     document.getElementById('dynamicCalculatorResult').classList.add('hidden');
@@ -1047,8 +1106,21 @@ function openCalculator(id) {
     document.getElementById('calculatorDialog').showModal();
     return;
   }
+  if (id === 'hipocalemia') {
+    document.getElementById('dynamicCalculatorFormula').hidden = true;
+    document.getElementById('dynamicCalculatorFields').classList.remove('hydration-calculator-fields');
+    document.getElementById('dynamicCalculatorFields').classList.add('hypokalemia-calculator-fields');
+    document.getElementById('calculateDynamicCalculator').hidden = false;
+    document.getElementById('calculateDynamicCalculator').textContent = 'Calcular reposição';
+    document.getElementById('dynamicCalculatorResult').classList.add('hidden');
+    document.getElementById('dynamicCalculatorResult').classList.remove('clinical-result');
+    document.getElementById('dynamicCalculatorSource').hidden = true;
+    renderHypokalemiaCalculator();
+    document.getElementById('calculatorDialog').showModal();
+    return;
+  }
   document.getElementById('dynamicCalculatorFormula').hidden = Boolean(calculator.clinicalGuide);
-  document.getElementById('dynamicCalculatorFields').classList.remove('hydration-calculator-fields');
+  document.getElementById('dynamicCalculatorFields').classList.remove('hydration-calculator-fields', 'hypokalemia-calculator-fields');
   document.getElementById('calculateDynamicCalculator').hidden = false;
   document.getElementById('calculateDynamicCalculator').textContent = 'Calcular';
   document.getElementById('dynamicCalculatorFormula').textContent = calculator.formula;
@@ -1086,7 +1158,7 @@ function renderHydrationCalculator() {
         { title: '>1500 g', note: 'Faixa de referência mais conservadora', rows: [['D1', ['60', '80']], ['D2', ['80', '100']], ['D3', ['100', '120']], ['D4+', ['120', '140']]] },
         { title: '<1500 g', note: 'Faixa mais ampla para prematuros menores', rows: [['D1', ['70', '100']], ['D2', ['90', '120']], ['D3', ['110', '140']], ['D4+', ['130', '180']]] },
       ] : [];
-  const caloricWeightForReferences = (() => { const w = Number(hydrationDraft.weight); return w > 0 ? (Math.min(w, 10) * 100 + Math.min(Math.max(w - 10, 0), 10) * 50 + Math.max(w - 20, 0) * 20) / 100 : 0; })();
+  const caloricWeightForReferences = (() => { const w = Number(hydrationDraft.weight); return w > 0 ? Math.round(((Math.min(w, 10) * 100 + Math.min(Math.max(w - 10, 0), 10) * 50 + Math.max(w - 20, 0) * 20) / 100) * 10) / 10 : 0; })();
   const referencePanel = hydrationDraft.referencesOpen ? `<div class="hv-reference-panel"><p>Toque em um valor para preencher ${hydrationDraft.referenceTab === 'pediatrics' ? 'o percentual do Holliday' : 'a taxa hídrica'}.</p><div class="hv-reference-tabs">${referenceTabs.map(([value, label]) => `<button type="button" class="${hydrationDraft.referenceTab === value ? 'active' : ''}" data-hv-reference-tab="${value}" aria-pressed="${hydrationDraft.referenceTab === value}">${label}</button>`).join('')}</div>${hydrationDraft.referenceTab === 'pediatrics' ? `<div class="hv-ped-reference"><strong>Percentual do Holliday</strong><p>Depois de informar o peso, confira o volume diário em cada percentual do Holliday e toque na linha que deseja usar.</p>${[[100, 'Criança bem hidratada, sem necessidade de restrição hídrica.'], [80, 'Pode ser usado quando você decide restringir a manutenção de forma mais leve.'], [70, 'Redução moderada da manutenção quando você decide restringir mais do que 80%, mas sem chegar a 50%.'], [50, 'Maior restrição hídrica quando houver retenção hídrica ou risco de hipervolemia.']].map(([pct, note]) => `<button type="button" class="hv-ped-option ${Number(hydrationDraft.rate) === pct ? 'active' : ''}" data-hv-reference-rate="${pct}" data-hv-ped-option="${pct}"><span><strong>${pct}% do Holliday</strong><small>${note}</small></span><span class="hv-ped-volume">${caloricWeightForReferences ? new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 1 }).format(caloricWeightForReferences * pct) + ' mL/dia' : 'Informe o peso'}<small>${pct}%</small></span></button>`).join('')}<div class="hv-ped-reference"><strong>Peso calórico</strong><p>Aqui, o <b>peso calórico</b> é usado como base para Holliday, macronutrientes e eletrólitos.</p><div class="hv-ped-option"><span><strong>Peso calórico calculado</strong><small>Base para Holliday, macro e eletrólitos</small></span><span class="hv-ped-volume" id="hvReferenceCaloricWeight">${caloricWeightForReferences ? new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 1 }).format(caloricWeightForReferences) + ' kg' : 'Informe o peso'}</span></div></div></div>` : `${referenceRates.map(group => `<div class="hv-neonatal-group">${group.title ? `<div class="hv-neonatal-group-title"><strong>${group.title}</strong><small>${group.note}</small></div>` : ''}${group.rows.map(([day, values]) => `<div class="hv-reference-row"><strong>${day}${day === 'D4+' ? '<small> A partir do dia 4</small>' : ''}</strong><span>${values.map(value => `<button type="button" class="${hydrationDraft.rate === value ? 'active' : ''}" data-hv-reference-rate="${value}">${value} mL/kg/dia</button>`).join('')}</span></div>`).join('')}</div>`).join('')}<div class="hv-reference-warning">⚠ Ajuste a referência neonatal ao peso ao nascer, perdas insensíveis, fototerapia, calor radiante e protocolo local.</div>`}</div>` : '';
   const ionCard = (key, config) => {
     const ion = hydrationDraft[key];
@@ -1106,7 +1178,7 @@ function renderHydrationCalculator() {
       <section class="hv-section"><div class="hv-section-title"><span>1 · BASE HÍDRICA</span><button type="button" class="hv-reference-trigger" data-hv-references aria-expanded="${hydrationDraft.referencesOpen}">▤ Referências <span>${hydrationDraft.referencesOpen ? '⌃' : '⌄'}</span></button></div><div class="hv-fields two"><label>PESO<input type="number" min="0" step="any" data-hv-input="weight" value="${escapeHtml(hydrationDraft.weight)}" placeholder="Ex: 12,5"><span class="unit">kg</span></label><label>${hydrationDraft.referenceTab === 'pediatrics' ? 'PERCENTUAL DO HOLLIDAY' : 'TAXA HÍDRICA PRESCRITA'}<input type="number" min="0" step="any" data-hv-input="rate" value="${escapeHtml(hydrationDraft.rate)}" placeholder="${hydrationDraft.referenceTab === 'pediatrics' ? 'Ex: 80' : 'Ex: 100'}"><span class="unit">${hydrationDraft.referenceTab === 'pediatrics' ? '%' : 'mL/kg/dia'}</span></label></div><p class="hv-hint" id="hvCaloricHint">Informe peso e taxa hídrica.</p>${referencePanel}</section>
       <section class="hv-section"><div class="hv-section-title">2 · GLICOSE ${modeButtons('glucose', hydrationDraft.glucoseMode, [['tig', 'TIG · mg/kg/min'], ['grams', 'Gramas · g/Kcal']])}</div><label class="hv-main-input"><span data-hv-glucose-label>${hydrationDraft.glucoseMode === 'tig' ? 'TIG' : 'GRAMAS POR CALORIA'}</span><input type="number" min="0" step="any" data-hv-input="glucose" value="${escapeHtml(hydrationDraft.glucose)}" placeholder="${hydrationDraft.glucoseMode === 'tig' ? 'Ex: 5' : 'Ex: 1,5'}"><span class="unit">${hydrationDraft.glucoseMode === 'tig' ? 'mg/kg/min' : 'g/Kcal'}</span></label><p class="hv-hint" id="hvGlucoseHint">${hydrationDraft.glucoseMode === 'tig' ? 'Sobre o peso real' : 'Sobre o peso calórico'}</p></section>
       <section class="hv-section"><div class="hv-section-title">3 · ELETRÓLITOS ${modeButtons('electrolyte', hydrationDraft.electrolyteMode, [['dose', 'Por dose · mEq/kg/dia'], ['concentration', 'Por concentração · mEq/L']])}</div><div class="hv-ions">${Object.entries(ionConfig).map(([key, config]) => ionCard(key, config)).join('')}</div></section>
-      <section class="hv-section"><div class="hv-section-title">PREPARO DA BOLSA</div>${modeButtons('base', hydrationDraft.base, [['5', 'SG5% + AD'], ['10', 'SG10% + AD'], ['25', 'SG25% + AD'], ['50', 'SG50% + AD']])}<div class="hv-preparation" id="hvPreparation"><p class="empty-state">Preencha peso, taxa hídrica e glicose para visualizar o preparo.</p></div></section>
+      <section class="hv-section"><div class="hv-section-title">PREPARO DA BOLSA</div>${modeButtons('base', hydrationDraft.base, [['5', 'SG5% + AD'], ['10', 'SG10% + AD'], ['25', 'SG25% + AD'], ['50', 'SG50% + AD'], ['5+50', 'SG5% + SG50%']])}<div class="hv-preparation" id="hvPreparation"><p class="empty-state">Preencha peso, taxa hídrica e glicose para visualizar o preparo.</p></div></section>
       <section class="hv-section hv-final"><div class="hv-section-title">VELOCIDADE DE INFUSÃO</div><div id="hvInfusion" class="hv-infusion"></div><div class="hv-section-title">SOLUÇÃO FINAL</div><div id="hvFinal" class="hv-final-grid"></div><div class="hv-section-title">PRESCRIÇÃO PRONTA PARA COPIAR</div><div id="hvPrescription"></div><button type="button" class="button secondary small" id="hvCopy">Copiar tudo</button></section>
       <p class="form-hint">Ferramenta de apoio. Confira os valores, as unidades, a compatibilidade dos aditivos e o protocolo do seu serviço antes de prescrever.</p>
     </div>`;
@@ -1143,6 +1215,8 @@ function renderHydrationCalculator() {
       hydrationDraft.glucoseValues[hydrationDraft.glucoseMode] = hydrationDraft.glucose;
       hydrationDraft.glucoseMode = button.dataset.mode;
       hydrationDraft.glucose = hydrationDraft.glucoseValues[hydrationDraft.glucoseMode] || '';
+      if (hydrationDraft.glucoseMode === 'grams' && hydrationDraft.base === '5+50') hydrationDraft.base = '5';
+      else if (hydrationDraft.glucoseMode === 'tig' && hydrationDraft.base === '5') hydrationDraft.base = '5+50';
     }
     else if (button.dataset.hvMode === 'electrolyte') hydrationDraft.electrolyteMode = button.dataset.mode;
     else hydrationDraft.base = button.dataset.mode;
@@ -1170,6 +1244,67 @@ function renderHydrationCalculator() {
   });
   calculateHydration(true);
 }
+function renderHypokalemiaCalculator() {
+  const container = document.getElementById('dynamicCalculatorFields');
+  const d = hypokalemiaDraft;
+  const ev = d.route === 'iv';
+  container.innerHTML = `<div class="hk-layout">
+    <section class="hk-section"><h3>Dados da criança</h3><div class="hk-grid"><label>PESO<input type="number" min="0" step="any" data-hk-input="weight" value="${escapeHtml(d.weight)}" placeholder="Ex: 15"><span>kg</span></label><label>K⁺ SÉRICO<input type="number" min="0" step="any" data-hk-input="potassium" value="${escapeHtml(d.potassium)}" placeholder="Ex: 2,5"><span>mEq/L</span></label></div>
+    <label>VIA DE REPOSIÇÃO<select data-hk-input="route"><option value="oral" ${!ev ? 'selected' : ''}>Via oral</option><option value="iv" ${ev ? 'selected' : ''}>Endovenosa</option></select></label><p class="hk-hint">A via oral é preferencial quando tolerada. Considere a via EV conforme condição clínica e protocolo.</p></section>
+    <section class="hk-section"><h3>Parâmetros de reposição</h3>${ev ? `<div class="hk-grid"><label>DOSE<input type="number" min="0" step="any" data-hk-input="dose" value="${escapeHtml(d.dose)}" placeholder="Ex: 0,2"><span>mEq/kg/h</span></label><label>TEMPO<input type="number" min="0" step="any" data-hk-input="time" value="${escapeHtml(d.time)}" placeholder="Ex: 3"><span>horas</span></label><label>CONCENTRAÇÃO FINAL<input type="number" min="0" step="any" data-hk-input="finalConcentration" value="${escapeHtml(d.finalConcentration)}" placeholder="Ex: 12"><span>mEq/L</span></label><label>APRESENTAÇÃO DE KCl<select data-hk-input="kclPresentation"><option value="kcl10" ${d.kclPresentation === 'kcl10' ? 'selected' : ''}>KCl 10% · 1,34 mEq/mL</option><option value="kcl15" ${d.kclPresentation === 'kcl15' ? 'selected' : ''}>KCl 15% · 2,01 mEq/mL</option><option value="kcl191" ${d.kclPresentation === 'kcl191' ? 'selected' : ''}>KCl 19,1% · 2,56 mEq/mL</option></select></label></div><p class="hk-hint">O preparo calculado é uma estimativa de volume final e diluente. Confira acesso, compatibilidade e limites institucionais.</p>` : `<div class="hk-grid"><label>DOSE DIÁRIA<input type="number" min="0" step="any" data-hk-input="dose" value="${escapeHtml(d.dose)}" placeholder="Ex: 1"><span>mEq/kg/dia</span></label><label>NÚMERO DE TOMADAS<input type="number" min="0" step="1" data-hk-input="frequency" value="${escapeHtml(d.frequency)}" placeholder="Ex: 4"><span>por dia</span></label><label>CONCENTRAÇÃO DO XAROPE<input type="number" min="0" step="any" data-hk-input="oralConcentration" value="${escapeHtml(d.oralConcentration)}" placeholder="Ex: 1,33"><span>mEq/mL</span></label></div><p class="hk-hint">Confira a concentração no rótulo do produto oral disponível.</p>`}</section>
+  </div>`;
+  container.querySelectorAll('[data-hk-input]').forEach(input => input.addEventListener(input.tagName === 'SELECT' ? 'change' : 'input', () => {
+    if (input.dataset.hkInput === 'route' && hypokalemiaDraft.route !== input.value) {
+      hypokalemiaDraft.route = input.value;
+      hypokalemiaDraft.dose = '';
+    } else hypokalemiaDraft[input.dataset.hkInput] = input.value;
+    if (input.dataset.hkInput === 'route') { renderHypokalemiaCalculator(); calculateHypokalemia(true); }
+    else calculateHypokalemia(true);
+  }));
+  calculateHypokalemia(true);
+}
+function calculateHypokalemia(silent = false) {
+  const d = hypokalemiaDraft, ev = d.route === 'iv';
+  const weight = Number(d.weight), potassium = Number(d.potassium), dose = Number(d.dose);
+  const box = document.getElementById('dynamicCalculatorResult');
+  if (!(weight > 0 && potassium > 0 && dose > 0)) { box.classList.add('hidden'); if (!silent) showToast('Informe peso, K⁺ sérico e dose prescrita.'); return; }
+  let total, metrics, memory, formula, alerts = [];
+  const severity = potassium < 2.0 ? 'Crítica' : potassium < 2.5 ? 'Grave' : potassium < 3.0 ? 'Moderada' : potassium < 3.5 ? 'Leve' : 'K⁺ sem hipocalemia';
+  const references = [{ label: 'kcl10', concentration: 1.34 }, { label: 'kcl15', concentration: 2.01 }, { label: 'kcl191', concentration: 2.56 }];
+  if (ev) {
+    const time = Number(d.time), finalConcentration = Number(d.finalConcentration), stock = references.find(item => item.label === d.kclPresentation)?.concentration || 0;
+    if (!(time > 0 && time <= 24 && finalConcentration > 0 && stock > 0)) { box.classList.add('hidden'); if (!silent) showToast('Informe tempo até 24 horas, concentração final e apresentação de KCl válidas.'); return; }
+    total = weight * dose * time;
+    const finalVolume = total * 1000 / finalConcentration, kclVolume = total / stock, diluent = finalVolume - kclVolume, infusion = finalVolume / time, hourlyPotassium = total / time;
+    if (diluent < 0) { box.classList.add('hidden'); if (!silent) showToast('A concentração final é menor que a concentração do estoque; confira os valores.'); return; }
+    if (dose > 0.2) alerts.push('Dose acima de 0,2 mEq/kg/h: reposição EV de alta vigilância; confirme monitorização cardíaca e bomba de infusão conforme protocolo.');
+    if (dose > 0.3) alerts.push('Acima de 0,3 mEq/kg/h: o Proped recomenda considerar acesso central e monitorização intensiva.');
+    if (dose > 0.5) alerts.push('Dose acima de 0,5 mEq/kg/h: excede o teto exibido pelo Proped; interrompa e revise o plano com protocolo/especialista.');
+    if (hourlyPotassium > 20) alerts.push('Taxa acima de 20 mEq/h: excede o limite exibido no guia do Proped; revise o plano com especialista/protocolo local.');
+    if (finalConcentration > 40 && finalConcentration <= 60) alerts.push('Concentração acima de 40 mEq/L: excede o limite periférico usual; requer exceção institucional e vigilância do acesso.');
+    if (finalConcentration > 60 && finalConcentration <= 120) alerts.push('Concentração acima de 60 mEq/L: requer acesso central e protocolo de monitorização.');
+    if (finalConcentration > 120) alerts.push('Concentração acima de 120 mEq/L: excede o teto exibido pelo Proped; revise o plano com especialista/protocolo local.');
+    if (total > Math.min(weight, 40)) alerts.push(`Total de ${number.format(total)} mEq acima do esquema usual por evento (1 mEq/kg ou 40 mEq); reavalie K⁺ antes de redosar.`);
+    if (finalVolume / weight > 250) alerts.push('Volume acima de 250 mL/kg: confira risco de sobrecarga e a concentração final.');
+    metrics = [{ label: 'KCl concentrado', value: `${clinicalNumber.format(kclVolume)} mL` }, { label: 'Diluente', value: `${clinicalNumber.format(diluent)} mL` }, { label: 'Volume final', value: `${clinicalNumber.format(finalVolume)} mL` }, { label: 'Bomba de infusão', value: `${clinicalNumber.format(infusion)} mL/h por ${number.format(time)} h` }, { label: 'K⁺ por hora', value: `${clinicalNumber.format(hourlyPotassium)} mEq/h` }];
+    memory = [`Dose total = peso × dose × tempo = ${number.format(weight)} × ${number.format(dose)} × ${number.format(time)} = ${clinicalNumber.format(total)} mEq`, `Volume final = total × 1.000 ÷ concentração = ${number.format(total)} × 1.000 ÷ ${number.format(finalConcentration)} = ${clinicalNumber.format(finalVolume)} mL`, `Volume de ${d.kclPresentation === 'kcl10' ? 'KCl 10%' : d.kclPresentation === 'kcl15' ? 'KCl 15%' : 'KCl 19,1%'} = ${number.format(total)} ÷ ${number.format(stock)} = ${clinicalNumber.format(kclVolume)} mL`, `Diluente = ${clinicalNumber.format(finalVolume)} − ${clinicalNumber.format(kclVolume)} = ${clinicalNumber.format(diluent)} mL`, `Bomba = ${clinicalNumber.format(finalVolume)} ÷ ${number.format(time)} = ${clinicalNumber.format(infusion)} mL/h`];
+    formula = 'Dose total (mEq) = peso × dose (mEq/kg/h) × tempo; volume final (mL) = dose total × 1.000 ÷ concentração (mEq/L).';
+  } else {
+    const frequency = Number(d.frequency), oralConcentration = Number(d.oralConcentration);
+    if (!(Number.isInteger(frequency) && frequency >= 2 && frequency <= 6 && oralConcentration > 0)) { box.classList.add('hidden'); if (!silent) showToast('Informe de 2 a 6 tomadas por dia e a concentração oral do produto.'); return; }
+    total = weight * dose; const perDose = total / frequency, mlPerDose = perDose / oralConcentration;
+    if (dose < 1 || dose > 4) alerts.push('Dose diária fora da faixa de 1–4 mEq/kg/dia apresentada no guia do Proped; confirme o plano prescrito.');
+    if (perDose > Math.min(weight, 40)) alerts.push('Dose por tomada acima de 1 mEq/kg ou 40 mEq; confira o limite por dose no protocolo e a apresentação.');
+    metrics = [{ label: 'Dose total diária', value: `${number.format(total)} mEq/dia` }, { label: 'Dose por tomada', value: `${number.format(perDose)} mEq · ${number.format(mlPerDose)} mL` }, { label: 'Frequência', value: `${number.format(frequency)} tomadas/dia` }];
+    memory = [`Dose diária = peso × dose = ${number.format(weight)} × ${number.format(dose)} = ${number.format(total)} mEq/dia`, `Dose por tomada = ${number.format(total)} ÷ ${number.format(frequency)} = ${number.format(perDose)} mEq`, `Volume por tomada = ${number.format(perDose)} ÷ ${number.format(oralConcentration)} = ${number.format(mlPerDose)} mL`];
+    formula = 'Dose diária (mEq) = peso × dose (mEq/kg/dia); volume por tomada = dose diária ÷ tomadas/dia ÷ concentração oral.';
+  }
+  if (potassium >= 3.5) alerts.push('K⁺ informado não está abaixo de 3,5 mEq/L; confirme a indicação clínica da reposição.');
+  const tone = alerts.length || potassium < 2.5 ? 'out' : potassium < 3.5 ? 'out' : 'normal';
+  const status = potassium >= 3.5 ? 'K⁺ sem hipocalemia' : `Hipocalemia ${severity.toLocaleLowerCase('pt-BR')}`;
+  box.innerHTML = renderClinicalCalculatorResult({ label: ev ? 'Resultado · Reposição EV de KCl' : 'Resultado · Reposição oral de KCl', value: clinicalNumber.format(total), unit: ev ? 'mEq total' : 'mEq/dia', reference: 'K⁺ sérico ≥3,5 mEq/L; confirme intervalo do laboratório', status, tone, formula, memory, metrics, alerts, caution: 'Estimativa de apoio. KCl é medicamento de alta vigilância; confira prescrição, função renal, diurese, ECG e protocolo institucional antes da administração.' }, CALCULATOR_IMPLEMENTATIONS.hipocalemia.clinicalGuide);
+  box.classList.add('clinical-result'); box.classList.remove('hidden');
+}
 function calculateHydration(silent = false) {
   const d = hydrationDraft;
   const weight = Number(d.weight), rate = Number(d.rate), glucose = Number(d.glucose);
@@ -1183,7 +1318,7 @@ function calculateHydration(silent = false) {
     return;
   }
   const energy = Math.min(weight, 10) * 100 + Math.min(Math.max(weight - 10, 0), 10) * 50 + Math.max(weight - 20, 0) * 20;
-  const caloricWeight = energy / 100;
+  const caloricWeight = Math.round((energy / 100) * 10) / 10;
   const totalMl = caloricWeight * rate;
   const totalL = totalMl / 1000;
   const glucoseG = d.glucoseMode === 'tig' ? glucose * weight * 1.44 : glucose * caloricWeight;
@@ -1223,9 +1358,29 @@ function calculateHydration(silent = false) {
     ions[ion.key] = { ...ion, amount, volume, concentration: amount / totalL, presentation, enabled: item.enabled };
   }
   const preparedIons = Object.values(ions).filter(ion => ion.enabled);
-  const glucoseStockMl = glucoseG * 100 / Number(d.base);
   const additiveMl = preparedIons.reduce((sum, ion) => sum + ion.volume, 0);
-  const waterMl = totalMl - glucoseStockMl - additiveMl;
+  let glucoseStockMl, waterMl, glucoseBaseParts;
+  if (d.base === '5+50') {
+    const availableBaseMl = totalMl - additiveMl;
+    const sg50Ml = (glucoseG - availableBaseMl * 0.05) / 0.45;
+    const sg5Ml = availableBaseMl - sg50Ml;
+    if (sg5Ml < -0.05 || sg50Ml < -0.05) {
+      document.getElementById('hvPreparation').innerHTML = '<p class="empty-state">A mistura SG5% + SG50% não consegue atingir a TIG neste volume. Revise a taxa hídrica, os aditivos ou selecione outra apresentação de glicose.</p>';
+      document.getElementById('hvInfusion').replaceChildren();
+      document.getElementById('hvFinal').replaceChildren();
+      document.getElementById('hvPrescription').replaceChildren();
+      document.querySelectorAll('.hv-ion-result').forEach(node => { node.textContent = ''; });
+      if (!silent) showToast('A mistura de glicose selecionada não é compatível com o volume final.');
+      return;
+    }
+    glucoseStockMl = availableBaseMl;
+    waterMl = 0;
+    glucoseBaseParts = [{ label: 'SG5%', volume: Math.max(0, sg5Ml) }, { label: 'SG50%', volume: Math.max(0, sg50Ml) }];
+  } else {
+    glucoseStockMl = glucoseG * 100 / Number(d.base);
+    waterMl = totalMl - glucoseStockMl - additiveMl;
+    glucoseBaseParts = [{ label: `SG${d.base}%`, volume: glucoseStockMl }, { label: 'AD', volume: Math.max(0, waterMl) }];
+  }
   if (waterMl < -0.05) {
     document.getElementById('hvPreparation').innerHTML = '<p class="empty-state">Os estoques selecionados excedem o volume final. Troque a apresentação ou revise a taxa informada.</p>';
     document.getElementById('hvInfusion').replaceChildren();
@@ -1251,14 +1406,19 @@ function calculateHydration(silent = false) {
     const card = document.querySelector(`[data-hv-ion-result="${ion.key}"]`);
     if (card) card.textContent = `${nf(ion.amount)} mEq/dia · ${nf(ion.volume)} mL${ion.key === 'ca' ? ' · cálculo separado da bolsa' : ''}`;
   }
-  const baseParts = [`<div><span>SG${d.base}%</span><strong>${nf(glucoseStockMl)} mL</strong></div>`, `<div><span>AD</span><strong>${nf(Math.max(0, waterMl))} mL</strong></div>`];
+  const baseParts = glucoseBaseParts.map(part => `<div><span>${part.label}</span><strong>${nf(part.volume)} mL</strong></div>`);
   for (const ion of preparedIons) baseParts.push(`<div><span>${escapeHtml(document.querySelector(`[data-hv-ion-input="${ion.key}"][data-field="presentation"]`).selectedOptions[0].textContent)} <small>${nf(ion.amount)} mEq</small></span><strong>${nf(ion.volume)} mL</strong></div>`);
   baseParts.push(`<div class="hv-total"><span>Total</span><strong>${nf(totalMl)} mL</strong></div>`);
   document.getElementById('hvPreparation').innerHTML = baseParts.join('');
   document.getElementById('hvInfusion').innerHTML = `<strong>${nf(totalMl / 24)} <small>mL/h</small></strong><span>${Math.round(totalMl / 24 * 20 / 60)} gts/min · ${nf(totalMl / 24)} micro/min</span>`;
   document.getElementById('hvFinal').innerHTML = `<div><span>OSMOLARIDADE</span><strong>${nf(osmolarity)} mOsm/L</strong></div><div><span>CONC. DE GLICOSE</span><strong>${nf(glucosePercent)}%</strong></div><div><span>CONC. DE SÓDIO</span><strong>${Math.round(sodiumConc)} mEq/L</strong></div><div><span>CONC. DE POTÁSSIO</span><strong>${Math.round(potassiumConc)} mEq/L</strong></div><div><span>CONC. DE MAGNÉSIO</span><strong>${Math.round(magnesiumConc)} mEq/L</strong></div>${ions.ca.enabled ? `<div><span>CONC. DE CÁLCIO</span><strong>${Math.round(calciumConc)} mEq/L</strong></div>` : ''}`;
-  const doseSummary = ionMeta.filter(ion => ions[ion.key].enabled).map(ion => `${ion.symbol}:${nf(d[ion.key].dose)}${ion.key === 'ca' ? ` ${d.ca.unit === 'meq' ? 'mEq' : d.ca.unit === 'mgCa' ? 'mg Ca' : 'mg glucon.'}` : ''}`).join(' ');
-  document.getElementById('hvPrescription').innerHTML = `<div class="hv-copy-block"><small>RESUMO</small><b>HV TH ${nf(rate)} mL/kg/dia · ${doseSummary} · IV a ${nf(totalMl / 24)} mL/h</b></div><div class="hv-copy-block"><small>MODO DE PREPARO</small><b>SG${d.base}%: ${nf(glucoseStockMl)} mL + AD: ${nf(Math.max(0, waterMl))} mL + ${preparedIons.map(ion => `${ion.label} ${nf(ion.volume)} mL`).join(' + ')} · Volume total: ${nf(totalMl)} mL</b></div>`;
+  const doseSummary = ionMeta.filter(ion => ions[ion.key].enabled).map(ion => {
+    if (d.electrolyteMode === 'concentration') return `${ion.symbol}:${nf(d[ion.key].concentration)} mEq/L`;
+    return `${ion.symbol}:${nf(d[ion.key].dose)}${ion.key === 'ca' ? ` ${d.ca.unit === 'meq' ? 'mEq/kg/dia' : d.ca.unit === 'mgCa' ? 'mg Ca/kg/dia' : 'mg gluconato/kg/dia'}` : ' mEq/kg/dia'}`;
+  }).join(' ');
+  const glucoseSummary = d.glucoseMode === 'tig' ? `TIG ${nf(glucose)} mg/kg/min` : `Glicose ${nf(glucose)} g/Kcal`;
+  const glucosePreparationSummary = glucoseBaseParts.map(part => `${part.label}: ${nf(part.volume)} mL`).join(' + ');
+  document.getElementById('hvPrescription').innerHTML = `<div class="hv-copy-block"><small>RESUMO</small><b>HV TH ${nf(rate)} mL/kg/dia · ${glucoseSummary} · ${doseSummary} · IV a ${nf(totalMl / 24)} mL/h</b></div><div class="hv-copy-block"><small>MODO DE PREPARO</small><b>${glucosePreparationSummary} + ${preparedIons.map(ion => `${ion.label} ${nf(ion.volume)} mL`).join(' + ')} · Volume total: ${nf(totalMl)} mL</b></div>`;
 }
 function renderClinicalCalculatorResult(result, guide) {
   const memory = Array.isArray(result.memory) ? result.memory : [result.memory];
@@ -1269,12 +1429,15 @@ function renderClinicalCalculatorResult(result, guide) {
     const highPct = (high - min) / (max - min) * 100;
     return `<div class="clinical-scale"><div class="clinical-scale-bar"><span class="clinical-scale-low" style="width:${lowPct}%"></span><span class="clinical-scale-normal" style="left:${lowPct}%;width:${highPct - lowPct}%"></span><span class="clinical-scale-high" style="left:${highPct}%;width:${100 - highPct}%"></span><i style="left:${pct}%"></i></div><div><span>&lt; ${low} Hipo</span><strong>${low}–${high} Normal</strong><span>&gt; ${high} Hiper</span></div></div>`;
   })() : '';
+  const metrics = result.metrics?.length ? `<div class="clinical-metrics">${result.metrics.map(metric => `<div><span>${escapeHtml(metric.label)}</span><strong>${escapeHtml(metric.value)}</strong></div>`).join('')}</div>` : '';
+  const alerts = result.alerts?.length ? `<div class="clinical-alerts"><strong>Atenção · ${result.alerts.length} aviso${result.alerts.length === 1 ? '' : 's'}</strong><ul>${result.alerts.map(alert => `<li>${escapeHtml(alert)}</li>`).join('')}</ul></div>` : '';
   const guideHtml = `<details class="clinical-guide"><summary><span><small>SOBRE O MÉTODO</small><strong>Guia clínico completo</strong></span><i aria-hidden="true"></i></summary><div class="clinical-guide-content">${guide.sections.map(section => `<section><h4>${escapeHtml(section.title)}</h4>${(section.paragraphs || []).map(paragraph => `<p>${escapeHtml(paragraph)}</p>`).join('')}${section.bullets?.length ? `<ul>${section.bullets.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>` : ''}</section>`).join('')}<section><h4>Referências</h4><ul>${guide.references.map(reference => `<li><a href="${escapeHtml(reference.url)}" target="_blank" rel="noopener">${escapeHtml(reference.label)} ↗</a></li>`).join('')}</ul></section></div></details>`;
-  return `<div class="clinical-result-top"><div><small>${escapeHtml(result.label)}</small><div><strong>${escapeHtml(result.value)}</strong><span>${escapeHtml(result.unit)}</span></div></div><div class="clinical-status clinical-status-${escapeHtml(result.tone)}">${escapeHtml(result.status)}</div></div><div class="clinical-reference"><span>Referência pediátrica: ${escapeHtml(result.reference)}</span></div>${scale}<div class="clinical-formula"><strong>Fórmula</strong><span>${escapeHtml(result.formula)}</span><small>Memória de cálculo</small>${memory.map(line => `<p>${escapeHtml(line)}</p>`).join('')}</div>${guideHtml}<p class="clinical-result-caution">Estimativa de apoio clínico. Interprete com quadro clínico, método do laboratório e protocolo pediátrico local.</p>`;
+  return `<div class="clinical-result-top"><div><small>${escapeHtml(result.label)}</small><div><strong>${escapeHtml(result.value)}</strong><span>${escapeHtml(result.unit)}</span></div></div><div class="clinical-status clinical-status-${escapeHtml(result.tone)}">${escapeHtml(result.status)}</div></div><div class="clinical-reference"><span>Referência pediátrica: ${escapeHtml(result.reference)}</span></div>${scale}${metrics}${alerts}<div class="clinical-formula"><strong>Fórmula</strong><span>${escapeHtml(result.formula)}</span><small>Memória de cálculo</small>${memory.map(line => `<p>${escapeHtml(line)}</p>`).join('')}</div>${guideHtml}<p class="clinical-result-caution">${escapeHtml(result.caution || 'Estimativa de apoio clínico. Interprete com quadro clínico, método do laboratório e protocolo pediátrico local.')}</p>`;
 }
 function calculateActiveCalculator() {
   if (!activeCalculator) return;
   if (activeCalculator.title === 'Hidratação Venosa') return calculateHydration(false);
+  if (activeCalculator.title === 'Hipocalemia — Reposição de KCl') return calculateHypokalemia(false);
   try {
     const values = {};
     for (const field of activeCalculator.fields) {
