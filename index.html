@@ -82,44 +82,8 @@
       <section class="page" id="page-calculadoras">
         <div class="page-heading"><div><p class="eyebrow">CÁLCULO COM VALORES INFORMADOS POR VOCÊ</p><h1>Calculadoras</h1><p class="muted">Ferramentas aritméticas. Elas não escolhem medicamento nem recomendam dose.</p></div></div>
         <div class="calculator-layout">
-          <div class="section-heading"><div><p class="eyebrow">OPERAÇÕES BÁSICAS</p><h2>Cálculos de dose e infusão</h2></div></div>
-          <div class="calc-tabs" role="tablist" aria-label="Tipo de cálculo">
-            <button class="calc-tab active" data-calc="peso">Dose por peso</button>
-            <button class="calc-tab" data-calc="volume">Dose para volume</button>
-            <button class="calc-tab" data-calc="infusao">Velocidade de infusão</button>
-          </div>
-          <article class="panel calc-panel" id="calc-peso">
-            <div class="panel-title"><div><span class="mini-icon mint">kg</span><div><h2>Dose informada por peso</h2><p>Converte mg/kg em quantidade e volume com a concentração informada.</p></div></div></div>
-            <label>Medicação salva <span class="unit">opcional</span><select id="doseMedication"><option value="">Informar valores manualmente</option></select></label>
-            <div class="form-grid">
-              <label>Peso <span class="unit">kg</span><input id="doseWeight" type="number" min="0.001" step="any" placeholder="Ex.: 12,5"></label>
-              <label>Dose prescrita <span class="unit">mg/kg</span><input id="dosePerKg" type="number" min="0" step="any" placeholder="Digite a dose prescrita"></label>
-              <label>Concentração <span class="unit">mg/mL</span><input id="doseConcentration" type="number" min="0.001" step="any" placeholder="Consulte a apresentação"></label>
-              <label>Limite por dose (opcional) <span class="unit">mg</span><input id="doseMaximum" type="number" min="0" step="any" placeholder="Se indicado na referência"></label>
-            </div>
-            <button class="button primary" id="calculateDose">Calcular</button>
-            <div class="result-box hidden" id="doseResult" aria-live="polite"></div>
-          </article>
-          <article class="panel calc-panel hidden" id="calc-volume">
-            <div class="panel-title"><div><span class="mini-icon blue">mL</span><div><h2>Quantidade em volume</h2><p>Converte uma quantidade de princípio ativo para volume.</p></div></div></div>
-            <div class="form-grid two-col">
-              <label>Quantidade prescrita <span class="unit">mg</span><input id="amountMg" type="number" min="0" step="any" placeholder="mg"></label>
-              <label>Concentração <span class="unit">mg/mL</span><input id="amountConcentration" type="number" min="0.001" step="any" placeholder="mg/mL"></label>
-            </div>
-            <button class="button primary" id="calculateVolume">Calcular volume</button>
-            <div class="result-box hidden" id="volumeResult" aria-live="polite"></div>
-          </article>
-          <article class="panel calc-panel hidden" id="calc-infusao">
-            <div class="panel-title"><div><span class="mini-icon violet">mL/h</span><div><h2>Velocidade de infusão</h2><p>Calcula volume total dividido pelo tempo informado.</p></div></div></div>
-            <div class="form-grid two-col">
-              <label>Volume total <span class="unit">mL</span><input id="infusionVolume" type="number" min="0" step="any" placeholder="mL"></label>
-              <label>Duração <span class="unit">horas</span><input id="infusionHours" type="number" min="0.001" step="any" placeholder="horas"></label>
-            </div>
-            <button class="button primary" id="calculateInfusion">Calcular velocidade</button>
-            <div class="result-box hidden" id="infusionResult" aria-live="polite"></div>
-          </article>
           <section class="calculator-catalog" aria-labelledby="catalogTitle">
-            <div class="section-heading catalog-heading"><div><p class="eyebrow">CATÁLOGO DAS CALCULADORAS</p><h2 id="catalogTitle">Escolha uma categoria</h2><p class="muted">O PDF lista 99 calculadoras em 9 áreas. Cada fórmula será implementada com fonte e limites clínicos próprios antes de liberar resultados.</p></div></div>
+            <div class="section-heading catalog-heading"><div><p class="eyebrow">CATÁLOGO DAS CALCULADORAS</p><h2 id="catalogTitle">Escolha uma categoria</h2><p class="muted">Selecione uma calculadora para abrir seus parâmetros, resultados e referências clínicas disponíveis.</p></div></div>
             <label class="catalog-search-label" for="calculatorSearch">Buscar calculadora<input id="calculatorSearch" type="search" placeholder="Ex.: hiponatremia, Glasgow, Holliday-Segar"></label>
             <div id="calculatorCategories" class="calculator-categories" role="tablist" aria-label="Categorias de calculadoras"></div>
             <div id="calculatorCatalog" class="calculator-catalog-grid" role="list"></div>

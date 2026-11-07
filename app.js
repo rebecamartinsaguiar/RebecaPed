@@ -6,7 +6,7 @@ const LOCAL_BACKUP_KEY = 'meu-plantao:pre-sync-backup:v1';
 const STORAGE_BUCKET = 'protocol-attachments';
 const SUPPORTED_ATTACHMENT_TYPES = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/gif']);
 const CALCULATOR_CATALOG = {
-  'Hidroeletrolítico': 'Hidratação Venosa|Ânion Gap|Osmolaridade Plasmática|Sódio Corrigido — Hiperglicemia|Cálcio Corrigido — Albumina|Hipernatremia|Hiponatremia|Hipocalemia|SRO|Holliday-Segar|Reposição de Bicarbonato',
+  'Hidroeletrolítico': 'Hidratação Venosa|Ânion Gap|Osmolaridade Plasmática|Sódio Corrigido — Hiperglicemia|Cálcio Corrigido — Albumina|Hipernatremia|Hiponatremia|Hipocalemia|SRO|Reposição de Bicarbonato',
   'UTI / Emergência': 'Emergência Pediátrica|Equivalência de Corticoides|PRISM Original|PRISM III CPCCRN 4h|PRISM IV|PIM 2|PIM 3|PELOD-2|pSOFA|Phoenix Sepsis Score|VIS|OI / OSI|PASS|Pediatric Trauma Score|SIPA|Triagem SIRS pediátrica|Queimaduras — Lund & Browder|Infusão contínua|Vasopressores',
   'Neonatologia': 'Classificação do RN|Reanimação Neonatal|Crescimento do Prematuro INTERGROWTH-21st|Icterícia Neonatal|Nomograma de Bhutani|Score de Rodwell|Capurro Somático|Capurro Somatoneurológico|Escala de Apgar|Idade Corrigida do Prematuro|Escala de Finnegan|Escala de Ballard|Escore de Downes|FiO₂ em baixo fluxo|New Ballard Score|SNAPPE-II|CRIB-II|nSOFA|Silverman-Andersen',
   'Procedimentos': 'Dispositivos Pediátricos|Gotejamento|Tubo IOT Pediátrico',
@@ -200,21 +200,9 @@ const CALCULATOR_IMPLEMENTATIONS = {
     calculate: () => { throw new Error('Use os campos de reposição oral ou endovenosa.'); },
   },
   'sro': {
-    title: 'SRO — Volume prescrito por peso', category: 'Hidroeletrolítico',
-    fields: [{ id: 'weight', label: 'Peso', unit: 'kg' }, { id: 'volumeKg', label: 'Volume prescrito no plano selecionado', unit: 'mL/kg' }],
-    formula: 'Volume calculado = peso × volume em mL/kg definido pelo profissional conforme plano de reidratação.',
-    source: { label: 'Ministério da Saúde — doenças diarreicas agudas', url: 'https://www.gov.br/saude/pt-br/assuntos/saude-de-a-a-z/d/dda/' },
-    calculate: v => ({ lines: [`Volume correspondente à prescrição informada: ${number.format(v.weight * v.volumeKg)} mL.`], warning: 'A calculadora não classifica desidratação nem escolhe plano. Reavalie a criança e siga o protocolo local.' }),
-  },
-  'holliday-segar': {
-    title: 'Holliday-Segar — Manutenção', category: 'Hidroeletrolítico',
-    fields: [{ id: 'weight', label: 'Peso', unit: 'kg' }],
-    formula: 'Estimativa diária: 100 mL/kg para os primeiros 10 kg + 50 mL/kg para os próximos 10 kg + 20 mL/kg para cada kg acima de 20.',
-    source: { label: 'NICE — fluidoterapia IV em crianças', url: 'https://www.nice.org.uk/guidance/ng29/chapter/recommendations' },
-    calculate: v => {
-      const daily = Math.min(v.weight, 10) * 100 + Math.max(0, Math.min(v.weight - 10, 10)) * 50 + Math.max(0, v.weight - 20) * 20;
-      return { lines: [`Volume de manutenção estimado: ${number.format(daily)} mL/dia.`, `Média horária aritmética: ${number.format(daily / 24)} mL/h.`], warning: 'Necessidade de manutenção não equivale à prescrição final. Considere idade, doença, perdas, balanço, tonicidade e restrições.' };
-    },
+    title: 'SRO — Planos A, B e C', category: 'Hidroeletrolítico', fields: [],
+    formula: 'Planos de reidratação organizados conforme o protocolo do Ministério da Saúde.',
+    calculate: () => ({ lines: [] }),
   },
   'reposicao-de-bicarbonato': {
     title: 'Reposição de Bicarbonato', category: 'Hidroeletrolítico',
@@ -514,7 +502,7 @@ let selectedCalculatorCategory = CALCULATOR_CATEGORIES[0];
 let calculatorSearch = '';
 let activeCalculator = null;
 let hydrationDraft = {
-  weight: '', rate: '', glucoseMode: 'tig', glucose: '', glucoseValues: { tig: '', grams: '' }, electrolyteMode: 'dose', base: '5+50',
+  weight: '', rate: '', glucoseEnabled: true, glucoseMode: 'tig', glucose: '', glucoseValues: { tig: '', grams: '' }, electrolyteMode: 'dose', base: '5+50', distributionEnabled: false, aliquotHours: '6',
   referencesOpen: false, referenceTab: 'term',
   na: { dose: '3', presentation: 'nacl10', enabled: true },
   k: { dose: '1.5', presentation: 'kcl10', enabled: true },
@@ -522,6 +510,7 @@ let hydrationDraft = {
   mg: { dose: '0.3', presentation: 'mg10', enabled: true },
 };
 let hypokalemiaDraft = { weight: '', potassium: '', route: 'iv', dose: '', time: '6', finalConcentration: '12', kclPresentation: 'kcl10', frequency: '4', oralConcentration: '1.33' };
+let sroDraft = { age: '', weight: '', plan: 'A', zincProduct: 'suspension4', antibioticsOpen: false, antibiotic: '' };
 
 function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
@@ -1061,6 +1050,7 @@ function renderProtocolList() {
 function renderAll() { renderHome(); renderShifts(); renderMedicationList(); renderProtocolList(); renderDoseMedicationOptions(); renderCalculatorCatalog(); }
 function renderDoseMedicationOptions() {
   const select = document.getElementById('doseMedication');
+  if (!select) return;
   const current = select.value;
   select.innerHTML = '<option value="">Informar valores manualmente</option>' + state.medications.map(item => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join('');
   if (state.medications.some(item => item.id === current)) select.value = current;
@@ -1097,7 +1087,7 @@ function openCalculator(id) {
   document.getElementById('dynamicCalculatorTitle').textContent = calculator.title;
   if (id === 'hidratacao-venosa') {
     document.getElementById('dynamicCalculatorFormula').hidden = true;
-    document.getElementById('dynamicCalculatorFields').classList.remove('hypokalemia-calculator-fields');
+    document.getElementById('dynamicCalculatorFields').classList.remove('hypokalemia-calculator-fields', 'sro-calculator-fields');
     document.getElementById('dynamicCalculatorFields').classList.add('hydration-calculator-fields');
     document.getElementById('calculateDynamicCalculator').hidden = true;
     document.getElementById('dynamicCalculatorResult').classList.add('hidden');
@@ -1108,7 +1098,7 @@ function openCalculator(id) {
   }
   if (id === 'hipocalemia') {
     document.getElementById('dynamicCalculatorFormula').hidden = true;
-    document.getElementById('dynamicCalculatorFields').classList.remove('hydration-calculator-fields');
+    document.getElementById('dynamicCalculatorFields').classList.remove('hydration-calculator-fields', 'sro-calculator-fields');
     document.getElementById('dynamicCalculatorFields').classList.add('hypokalemia-calculator-fields');
     document.getElementById('calculateDynamicCalculator').hidden = false;
     document.getElementById('calculateDynamicCalculator').textContent = 'Calcular reposição';
@@ -1119,8 +1109,20 @@ function openCalculator(id) {
     document.getElementById('calculatorDialog').showModal();
     return;
   }
+  if (id === 'sro') {
+    document.getElementById('dynamicCalculatorFormula').hidden = true;
+    document.getElementById('dynamicCalculatorFields').classList.remove('hydration-calculator-fields', 'hypokalemia-calculator-fields');
+    document.getElementById('dynamicCalculatorFields').classList.add('sro-calculator-fields');
+    document.getElementById('calculateDynamicCalculator').hidden = true;
+    document.getElementById('dynamicCalculatorResult').classList.add('hidden');
+    document.getElementById('dynamicCalculatorResult').classList.remove('clinical-result');
+    document.getElementById('dynamicCalculatorSource').hidden = true;
+    renderSroCalculator();
+    document.getElementById('calculatorDialog').showModal();
+    return;
+  }
   document.getElementById('dynamicCalculatorFormula').hidden = Boolean(calculator.clinicalGuide);
-  document.getElementById('dynamicCalculatorFields').classList.remove('hydration-calculator-fields', 'hypokalemia-calculator-fields');
+  document.getElementById('dynamicCalculatorFields').classList.remove('hydration-calculator-fields', 'hypokalemia-calculator-fields', 'sro-calculator-fields');
   document.getElementById('calculateDynamicCalculator').hidden = false;
   document.getElementById('calculateDynamicCalculator').textContent = 'Calcular';
   document.getElementById('dynamicCalculatorFormula').textContent = calculator.formula;
@@ -1140,6 +1142,59 @@ function openCalculator(id) {
   document.getElementById('dynamicCalculatorResult').classList.remove('clinical-result');
   document.getElementById('dynamicCalculatorResult').replaceChildren();
   document.getElementById('calculatorDialog').showModal();
+}
+function renderSroCalculator() {
+  const container = document.getElementById('dynamicCalculatorFields');
+  const d = sroDraft;
+  const age = d.age === '' ? NaN : Number(d.age), weight = Number(d.weight);
+  const nf = value => new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 1 }).format(value);
+  const plans = [['A', 'Plano A · domicílio'], ['B', 'Plano B · unidade de saúde'], ['C', 'Plano C · hospital']];
+  const ageLabel = age < 1 ? 'Menor de 1 ano' : age <= 10 ? 'De 1 a 10 anos' : 'Maior de 10 anos';
+  const fields = `<section class="sro-section"><h3>Dados da criança</h3><div class="sro-grid"><label>IDADE<input type="number" min="0" step="any" data-sro-input="age" value="${escapeHtml(d.age)}" placeholder="Anos (ex.: 0,5)"><span>anos</span><small>Use 0 para menor de 1 ano; 1 ano ou mais para a faixa seguinte.</small></label><label>PESO<input type="number" min="0" step="any" data-sro-input="weight" value="${escapeHtml(d.weight)}" placeholder="Ex.: 15"><span>kg</span></label></div></section><section class="sro-section"><h3>Plano de tratamento</h3><div class="sro-plan-tabs" role="group" aria-label="Plano de reidratação">${plans.map(([key, label]) => `<button type="button" data-sro-plan="${key}" class="${d.plan === key ? 'active' : ''}" aria-pressed="${d.plan === key}">${label}</button>`).join('')}</div>${renderSroPlan(d, age, weight, ageLabel, nf)}</section><section class="sro-section sro-antibiotics"><label class="sro-checkbox"><input type="checkbox" data-sro-antibiotics ${d.antibioticsOpen ? 'checked' : ''}><span>Abrir cálculo de doses de antibióticos e antiparasitários</span></label>${d.antibioticsOpen ? `<div class="sro-antibiotic-result" id="sroAntibioticResult">${renderSroAntibiotic(d.antibiotic, weight, age, nf)}</div>` : ''}</section><details class="sro-guide"><summary><span><small>SOBRE O MÉTODO</small><strong>Guia da prática clínica</strong></span><i aria-hidden="true"></i></summary><div class="sro-guide-content"><section><h4>O que é</h4><p>A solução de sais de reidratação oral (SRO) é usada para prevenir ou tratar desidratação por diarreia, conforme avaliação clínica do estado de hidratação.</p></section><section><h4>Quando usar</h4><ul><li>Plano A: sem sinais de desidratação, tratamento domiciliar e prevenção.</li><li>Plano B: desidratação sem gravidade, com reidratação oral supervisionada em serviço de saúde.</li><li>Plano C: desidratação grave, em unidade de saúde/hospital, com expansão e manutenção/reposição intravenosas.</li></ul></section><section><h4>Como usar</h4><ul><li>Informe idade e peso. Selecione o plano após classificar clinicamente a hidratação; a ferramenta não seleciona o plano.</li><li>No Plano A, ofereça líquidos após evacuações e episódios de vômito em pequenas quantidades e com frequência; mantenha alimentação e aleitamento.</li><li>No Plano B, o volume calculado é uma orientação inicial para 4–6 horas. A quantidade ingerida depende da sede e a solução é mantida até os sinais de desidratação desaparecerem.</li><li>No Plano C, use os volumes, tempos e soluções mostrados como organização do protocolo hospitalar. Reavalie continuamente e acompanhe resposta clínica.</li></ul></section><section><h4>Como interpretar e reavaliar</h4><ul><li>Plano B: se resolver a desidratação, migrar ao Plano A; se persistir, considerar sonda nasogástrica conforme protocolo; se evoluir para grave, Plano C. Sem melhora após 6 horas, encaminhar para referência hospitalar.</li><li>Plano C: iniciar SRO quando puder beber, em geral 2–3 horas após início da hidratação EV; observar pelo menos 6 horas e reavaliar. Manter em serviço até hidratação completa e manutenção por via oral.</li><li>Plano A: procurar atendimento se não melhorar em 2 dias ou se houver piora, vômitos repetidos, sangue nas fezes, redução da diurese, sede intensa ou recusa alimentar.</li></ul></section><section><h4>Pontos de atenção</h4><ul><li>Classificação de gravidade depende do exame clínico; diante de dúvida, o protocolo orienta considerar o cenário de maior gravidade.</li><li>Em recém-nascidos e menores de 5 anos com cardiopatia grave, iniciar expansão do Plano C com 10 mL/kg e seguir protocolo especializado.</li><li>No Plano C, a reposição é inicialmente 50 mL/kg/dia e deve ser ajustada às perdas. KCl só deve ser incluído conforme protocolo, função renal, diurese e eletrólitos.</li><li>Antibióticos são reservados às indicações descritas no protocolo (ex.: disenteria com comprometimento geral ou cólera grave). Antiparasitários têm indicações específicas. Não usar a lista como recomendação automática.</li><li>A calculadora não substitui avaliação médica, reavaliação seriada nem protocolo institucional.</li></ul></section><section><h4>Referência</h4><ul><li><a href="https://www.gov.br/saude/pt-br/centrais-de-conteudo/publicacoes/svsa/doencas-diarreicas-agudas/manejo-do-paciente-com-diarreia-avaliacao-do-estado-do-paciente" target="_blank" rel="noopener">Ministério da Saúde. Manejo do paciente com diarreia: avaliação do estado de hidratação do paciente (2023) ↗</a></li></ul></section></div></details>`;
+  container.innerHTML = `<div class="sro-layout">${fields}<p class="form-hint">A ferramenta organiza cálculos do protocolo. A classificação do plano e a decisão terapêutica dependem da avaliação clínica.</p></div>`;
+  container.querySelectorAll('[data-sro-input]').forEach(input => input.addEventListener('input', () => { const field = input.dataset.sroInput; d[field] = input.value; renderSroCalculator(); container.querySelector(`[data-sro-input="${field}"]`)?.focus(); }));
+  container.querySelectorAll('[data-sro-plan]').forEach(button => button.addEventListener('click', () => { d.plan = button.dataset.sroPlan; renderSroCalculator(); }));
+  container.querySelector('[data-sro-antibiotics]')?.addEventListener('change', event => { d.antibioticsOpen = event.target.checked; renderSroCalculator(); });
+  container.querySelectorAll('[data-sro-antibiotic]').forEach(input => input.addEventListener('change', event => { d.antibiotic = event.target.value; renderSroCalculator(); }));
+  container.querySelector('[data-sro-zinc]')?.addEventListener('change', event => { d.zincProduct = event.target.value; renderSroCalculator(); });
+}
+function renderSroPlan(d, age, weight, ageLabel, nf) {
+  const validWeight = weight > 0;
+  if (d.plan === 'A') {
+    if (!(age >= 0)) return '<p class="sro-hint">Informe a idade para exibir as orientações do Plano A.</p>';
+    const liquid = age < 1 ? '50–100 mL' : age <= 10 ? '100–200 mL' : 'Quantidade que a criança aceitar';
+    const zincDose = age < 0.5 ? 10 : age < 5 ? 20 : 0;
+    const zincProduct = `<label>APRESENTAÇÃO DO ZINCO<select data-sro-zinc><option value="suspension4" ${d.zincProduct==='suspension4'?'selected':''}>Suspensão 4 mg/mL (inclui 2 mg/0,5 mL)</option><option value="biozinc" ${d.zincProduct==='biozinc'?'selected':''}>Biozinc gotas · 10 mg/20 gotas</option><option value="zintrix" ${d.zincProduct==='zintrix'?'selected':''}>Zintrix · 2 mg/gota</option></select></label>`;
+    const zincVolume = d.zincProduct === 'suspension4' ? `${nf(zincDose / 4)} mL/dia` : d.zincProduct === 'biozinc' ? `${nf(zincDose * 2)} gotas/dia` : `${nf(zincDose / 2)} gotas/dia`;
+    return `<div class="sro-result-card"><h4>PLANO A · APÓS CADA EVACUAÇÃO DIARREICA</h4><div class="sro-result-value">${liquid}</div><p>${ageLabel}. Oferecer líquidos/SRO em pequenas quantidades e com maior frequência.</p><div class="sro-subcard"><strong>Zinco</strong>${zincDose ? `<p>${zincDose} mg por via oral, 1 vez ao dia, por 10–14 dias · ${zincVolume}</p>${zincProduct}` : '<p>O protocolo indica zinco para crianças menores de 5 anos; não calcular dose para esta idade.</p>'}</div><p class="sro-reassess"><b>Orientação:</b> manter alimentação habitual e aleitamento. Procurar atendimento se não melhorar em 2 dias ou diante de sinais de alerta.</p></div>`;
+  }
+  if (d.plan === 'B') {
+    if (!validWeight) return '<p class="sro-hint">Informe o peso para calcular o volume inicial de SRO.</p>';
+    const min = 50 * weight, target = 75 * weight, max = 100 * weight;
+    return `<div class="sro-result-card"><h4>PLANO B · SRO SUPERVISIONADA</h4><div class="sro-result-value">${nf(target)} mL <small>alvo inicial (75 mL/kg)</small></div><div class="sro-metrics"><div><span>Faixa inicial</span><b>${nf(min)}–${nf(max)} mL (50–100 mL/kg)</b></div><div><span>Período</span><b>4–6 horas</b></div><div><span>Taxa média orientativa</span><b>${nf(target / 6)}–${nf(target / 4)} mL/h*</b></div></div><p class="sro-formula">${nf(weight)} kg × 75 mL/kg = ${nf(target)} mL; faixa: ${nf(weight)} × 50–100 mL/kg = ${nf(min)}–${nf(max)} mL.</p><p class="sro-reassess"><b>Reavaliação:</b> oferta contínua conforme sede até desaparecerem os sinais. Se resolver, Plano A; se persistir, considerar sonda nasogástrica; se evoluir para desidratação grave, Plano C. Sem melhora após 6 horas, encaminhar para hospital de referência. O Plano B deve ocorrer em serviço de saúde e a criança deve permanecer sob observação.</p><small>*Taxa calculada sobre o alvo de 75 mL/kg distribuído entre 4 e 6 horas.</small></div>`;
+  }
+  if (!validWeight || !(age >= 0)) return '<p class="sro-hint">Informe idade e peso para calcular as fases do Plano C.</p>';
+  const infant = age < 1;
+  const firstMl = weight * 30, secondMl = weight * 70;
+  const firstHours = infant ? 1 : 0.5, secondHours = infant ? 5 : 2.5;
+  const maintenanceMl = weight <= 10 ? weight * 100 : weight <= 20 ? 1000 + (weight - 10) * 50 : Math.min(2000, 1500 + (weight - 20) * 20);
+  const replacementMl = weight * 50;
+  const kclMl = maintenanceMl * 0.02;
+  const rate = (volume, hours) => volume / hours;
+  const drops = (volume, hours, factor) => Math.round(volume / hours * factor / 60);
+  return `<div class="sro-result-card"><h4>PLANO C · EXPANSÃO IV — ${infant ? 'MENOR DE 1 ANO' : 'A PARTIR DE 1 ANO'}</h4><div class="sro-phase"><div><strong>1ª fase · SF 0,9% ou Ringer Lactato</strong><span>${nf(firstMl)} mL (${nf(weight)} × 30 mL/kg) · ${infant ? '1 hora' : '30 minutos'}</span><small>${nf(rate(firstMl, firstHours))} mL/h · ${drops(firstMl, firstHours, 20)} gotas/min (macro 20 gtt/mL) · ${drops(firstMl, firstHours, 60)} microgotas/min</small></div></div><div class="sro-phase"><div><strong>2ª fase · SF 0,9% ou Ringer Lactato</strong><span>${nf(secondMl)} mL (${nf(weight)} × 70 mL/kg) · ${infant ? '5 horas' : '2 h 30 min'}</span><small>${nf(rate(secondMl, secondHours))} mL/h · ${drops(secondMl, secondHours, 20)} gotas/min (macro 20 gtt/mL) · ${drops(secondMl, secondHours, 60)} microgotas/min</small></div></div><p class="sro-reassess"><b>Exceção:</b> recém-nascidos ou crianças menores de 5 anos com cardiopatia grave: iniciar com 10 mL/kg e seguir protocolo especializado.</p><h4>MANUTENÇÃO + REPOSIÇÃO · 24 HORAS</h4><div class="sro-metrics"><div><span>Manutenção · SG5% + SF 0,9% 4:1</span><b>${nf(maintenanceMl)} mL/dia · ${nf(maintenanceMl / 24)} mL/h</b></div><div><span>Reposição · SG5% + SF 0,9% 1:1</span><b>${nf(replacementMl)} mL/dia inicial · ${nf(replacementMl / 24)} mL/h</b></div><div><span>KCl 10% · apenas na manutenção</span><b>${nf(kclMl)} mL (2 mL/100 mL)</b></div></div><p class="sro-formula">Manutenção: ${weight <= 10 ? '100 mL/kg' : weight <= 20 ? '1.000 mL + 50 mL/kg acima de 10 kg' : '1.500 mL + 20 mL/kg acima de 20 kg (máx. 2.000 mL)'} · Reposição: 50 mL/kg/dia inicial, ajustar às perdas.</p><p class="sro-reassess"><b>Reavaliação:</b> avaliar continuamente e ajustar gotejamento se não houver melhora. Iniciar SRO quando puder beber, geralmente após 2–3 horas de hidratação EV. Observar por pelo menos 6 horas e reavaliar. Manter no serviço até hidratação completa e manutenção adequada por via oral.</p><small>Confira função renal, diurese, eletrólitos e indicação de KCl antes de adicionar à solução.</small></div>`;
+}
+function renderSroAntibiotic(choice, weight, age, nf) {
+  const options = [
+    ['azithro', 'Azitromicina', 'Disenteria com comprometimento do estado geral; a partir de 3 meses e sem imunodeficiência.', age < 0.25 ? 'Não calcular: o protocolo limita esta opção a crianças a partir de 3 meses.' : `<b>Dia 1:</b> ${nf(weight * 10)} mg VO, 1 vez ao dia (10 mg/kg). <b>Dias 2–5:</b> ${nf(weight * 5)} mg VO/dia (5 mg/kg/dia).`],
+    ['ceftriaxone-im', 'Ceftriaxona IM', 'Alternativa para disenteria com comprometimento geral; 3–5 dias.', weight <= 30 ? (age >= 0.25 ? `${nf(weight * 50)} mg IM 1 vez ao dia (50 mg/kg/dia), por 3–5 dias; confirmar ausência de imunodeficiência.` : 'Não calcular sem confirmar idade ≥3 meses e ausência de imunodeficiência; protocolo indica ceftriaxona EV 50–100 mg/kg/dia para esses grupos.') : `${nf(weight * 50)}–${nf(weight * 100)} mg IM 1 vez ao dia (50–100 mg/kg/dia), por 3–5 dias.`],
+    ['ceftriaxone-iv', 'Ceftriaxona EV', 'Menores de 3 meses ou criança com imunodeficiência; avaliação hospitalar.', `${nf(weight * 50)}–${nf(weight * 100)} mg EV 1 vez ao dia (50–100 mg/kg/dia).`],
+    ['cipro', 'Ciprofloxacino', 'Criança >30 kg (>10 anos), adolescente/adulto com disenteria.', weight > 30 && age > 10 ? '500 mg VO a cada 12 horas por 3 dias (dose fixa; não é calculada por kg).' : 'Não se aplica: o protocolo indica esta opção para >30 kg e >10 anos.'],
+    ['metro-amebiasis', 'Metronidazol · amebíase', 'Falha do tratamento de disenteria por Shigella ou achado compatível de E. histolytica, conforme protocolo.', `${nf(weight * 50)} mg/dia VO em 3 doses (${nf(weight * 50 / 3)} mg por dose), por 10 dias.`],
+    ['metro-giardia', 'Metronidazol · giardíase', 'Diarreia ≥14 dias com cistos/trofozoítos identificados, conforme protocolo.', `${nf(weight * 15)} mg/dia VO em 3 doses (${nf(weight * 5)} mg por dose), por 5 dias.`],
+  ];
+  if (!(weight > 0)) return '<p class="sro-hint">Informe o peso para exibir as doses calculadas.</p>';
+  return `<p class="sro-hint">Doses calculadas para ${nf(weight)} kg. Marque uma opção após confirmar indicação, idade, limites e protocolo.</p><div class="sro-antibiotic-options">${options.map(([id,label,indication,dose])=>`<label class="sro-antibiotic-option ${choice===id?'selected':''}"><input type="radio" name="sroAntibiotic" data-sro-antibiotic value="${id}" ${choice===id?'checked':''}><span><b>${label}</b><small>${indication}</small><strong>${dose}</strong></span></label>`).join('')}</div><small>Não calcula volume em mL porque a concentração do produto não foi informada. Os antibióticos são indicados apenas nas situações do protocolo; antiparasitários têm indicações específicas.</small>`;
 }
 function renderHydrationCalculator() {
   const container = document.getElementById('dynamicCalculatorFields');
@@ -1176,10 +1231,12 @@ function renderHydrationCalculator() {
   container.innerHTML = `
     <div class="hv-layout">
       <section class="hv-section"><div class="hv-section-title"><span>1 · BASE HÍDRICA</span><button type="button" class="hv-reference-trigger" data-hv-references aria-expanded="${hydrationDraft.referencesOpen}">▤ Referências <span>${hydrationDraft.referencesOpen ? '⌃' : '⌄'}</span></button></div><div class="hv-fields two"><label>PESO<input type="number" min="0" step="any" data-hv-input="weight" value="${escapeHtml(hydrationDraft.weight)}" placeholder="Ex: 12,5"><span class="unit">kg</span></label><label>${hydrationDraft.referenceTab === 'pediatrics' ? 'PERCENTUAL DO HOLLIDAY' : 'TAXA HÍDRICA PRESCRITA'}<input type="number" min="0" step="any" data-hv-input="rate" value="${escapeHtml(hydrationDraft.rate)}" placeholder="${hydrationDraft.referenceTab === 'pediatrics' ? 'Ex: 80' : 'Ex: 100'}"><span class="unit">${hydrationDraft.referenceTab === 'pediatrics' ? '%' : 'mL/kg/dia'}</span></label></div><p class="hv-hint" id="hvCaloricHint">Informe peso e taxa hídrica.</p>${referencePanel}</section>
-      <section class="hv-section"><div class="hv-section-title">2 · GLICOSE ${modeButtons('glucose', hydrationDraft.glucoseMode, [['tig', 'TIG · mg/kg/min'], ['grams', 'Gramas · g/Kcal']])}</div><label class="hv-main-input"><span data-hv-glucose-label>${hydrationDraft.glucoseMode === 'tig' ? 'TIG' : 'GRAMAS POR CALORIA'}</span><input type="number" min="0" step="any" data-hv-input="glucose" value="${escapeHtml(hydrationDraft.glucose)}" placeholder="${hydrationDraft.glucoseMode === 'tig' ? 'Ex: 5' : 'Ex: 1,5'}"><span class="unit">${hydrationDraft.glucoseMode === 'tig' ? 'mg/kg/min' : 'g/Kcal'}</span></label><p class="hv-hint" id="hvGlucoseHint">${hydrationDraft.glucoseMode === 'tig' ? 'Sobre o peso real' : 'Sobre o peso calórico'}</p></section>
+      <section class="hv-section"><div class="hv-section-title"><span>2 · GLICOSE</span>${modeButtons('glucose', hydrationDraft.glucoseMode, [['tig', 'TIG · mg/kg/min'], ['grams', 'Gramas · g/Kcal']])}</div><label class="hv-checkbox"><input type="checkbox" data-hv-glucose-toggle ${hydrationDraft.glucoseEnabled ? 'checked' : ''}><span>Incluir glicose no cálculo da HV</span></label>${hydrationDraft.glucoseEnabled ? `<label class="hv-main-input"><span data-hv-glucose-label>${hydrationDraft.glucoseMode === 'tig' ? 'TIG' : 'GRAMAS POR CALORIA'}</span><input type="number" min="0" step="any" data-hv-input="glucose" value="${escapeHtml(hydrationDraft.glucose)}" placeholder="${hydrationDraft.glucoseMode === 'tig' ? 'Ex: 5' : 'Ex: 1,5'}"><span class="unit">${hydrationDraft.glucoseMode === 'tig' ? 'mg/kg/min' : 'g/Kcal'}</span></label><p class="hv-hint" id="hvGlucoseHint">${hydrationDraft.glucoseMode === 'tig' ? 'Sobre o peso real' : 'Sobre o peso calórico'}</p>` : `<div class="hv-isotonic-note">Sem glicose: o volume basal será preparado com Soro Fisiológico 0,9% (solução isotônica).</div>`}</section>
       <section class="hv-section"><div class="hv-section-title">3 · ELETRÓLITOS ${modeButtons('electrolyte', hydrationDraft.electrolyteMode, [['dose', 'Por dose · mEq/kg/dia'], ['concentration', 'Por concentração · mEq/L']])}</div><div class="hv-ions">${Object.entries(ionConfig).map(([key, config]) => ionCard(key, config)).join('')}</div></section>
-      <section class="hv-section"><div class="hv-section-title">PREPARO DA BOLSA</div>${modeButtons('base', hydrationDraft.base, [['5', 'SG5% + AD'], ['10', 'SG10% + AD'], ['25', 'SG25% + AD'], ['50', 'SG50% + AD'], ['5+50', 'SG5% + SG50%']])}<div class="hv-preparation" id="hvPreparation"><p class="empty-state">Preencha peso, taxa hídrica e glicose para visualizar o preparo.</p></div></section>
+      <section class="hv-section"><div class="hv-section-title">DISTRIBUIÇÃO EM ALÍQUOTAS</div><label class="hv-checkbox"><input type="checkbox" data-hv-distribution-toggle ${hydrationDraft.distributionEnabled ? 'checked' : ''}><span>Distribuir a solução final em alíquotas</span></label>${hydrationDraft.distributionEnabled ? modeButtons('aliquot', hydrationDraft.aliquotHours, [['4', '4/4 h'], ['6', '6/6 h'], ['8', '8/8 h'], ['12', '12/12 h']]) : '<p class="hv-hint">Ative para ver volume e vazão de cada alíquota no preparo e na prescrição para copiar.</p>'}<div class="hv-aliquot-result" id="hvAliquotResult"></div></section>
+      <section class="hv-section"><div class="hv-section-title">PREPARO DA BOLSA</div>${hydrationDraft.glucoseEnabled ? modeButtons('base', hydrationDraft.base, [['5', 'SG5% + AD'], ['10', 'SG10% + AD'], ['25', 'SG25% + AD'], ['50', 'SG50% + AD'], ['5+50', 'SG5% + SG50%']]) : '<p class="hv-hint">Soro Fisiológico 0,9% como solução basal isotônica.</p>'}<div class="hv-preparation" id="hvPreparation"><p class="empty-state">Preencha peso e taxa hídrica para visualizar o preparo.</p></div></section>
       <section class="hv-section hv-final"><div class="hv-section-title">VELOCIDADE DE INFUSÃO</div><div id="hvInfusion" class="hv-infusion"></div><div class="hv-section-title">SOLUÇÃO FINAL</div><div id="hvFinal" class="hv-final-grid"></div><div class="hv-section-title">PRESCRIÇÃO PRONTA PARA COPIAR</div><div id="hvPrescription"></div><button type="button" class="button secondary small" id="hvCopy">Copiar tudo</button></section>
+      <details class="hv-practice-guide"><summary><span><small>SOBRE O MÉTODO</small><strong>Guia da prática clínica</strong></span><i aria-hidden="true"></i></summary><div class="hv-guide-content"><section><h4>Taxa horária de manutenção por peso (Holliday–Segar)</h4><div class="hv-guide-table-wrap"><table><thead><tr><th>Faixa de peso</th><th>Taxa horária</th><th>Volume diário</th></tr></thead><tbody><tr><td>0–10 kg</td><td>4 mL/kg/h</td><td>100 mL/kg/dia</td></tr><tr><td>10–20 kg</td><td>40 mL/h + 2 mL/kg/h para cada kg acima de 10</td><td>1.000 mL + 50 mL/kg acima de 10</td></tr><tr><td>&gt;20 kg</td><td>60 mL/h + 1 mL/kg/h para cada kg acima de 20</td><td>1.500 mL + 20 mL/kg acima de 20</td></tr></tbody></table></div><p>A equação estima manutenção; não foi validada prospectivamente como taxa ideal individual. Considere condição clínica, perdas, balanço e restrição de volume.</p></section><section><h4>Tonicidade e composição de soluções de manutenção</h4><div class="hv-guide-table-wrap"><table><thead><tr><th>Parâmetro</th><th>Isotônica (recomendada como padrão em crianças elegíveis)</th><th>Hipotônica (uso tradicional)</th></tr></thead><tbody><tr><td>Sódio</td><td>135–154 mEq/L; equivalente a SF 0,9% ou cristalóide isotônico balanceado</td><td>30–100 mEq/L; ex.: SF 0,2–0,45%</td></tr><tr><td>Potássio</td><td>Adicionar conforme necessidade individual de manutenção e protocolo</td><td>Mesma lógica, considerando a solução de base</td></tr><tr><td>Cálcio</td><td>Não incluído rotineiramente; reposição individual conforme indicação</td><td>—</td></tr><tr><td>Dextrose</td><td>2,5–5%, conforme necessidade clínica</td><td>Historicamente 5%</td></tr></tbody></table></div><p>Referência AAP: crianças de 28 dias a 18 anos que necessitam de manutenção IV devem receber solução isotônica com dextrose e KCl apropriados. A recomendação não se aplica a neonatos/UTI neonatal nem a vários grupos com comorbidades ou perdas especiais descritos na diretriz.</p></section><section><h4>Como usar e pontos de atenção</h4><ul><li>Escolha a taxa hídrica prescrita ou consulte a aba Referências, que reúne taxas neonatais e os percentuais pediátricos do Holliday.</li><li>A opção sem glicose monta a base com SF 0,9%; o sódio do SF basal participa da estimativa de osmolaridade, mas não é somado à concentração de sódio adicionado exibida.</li><li>As alíquotas apenas repartem a composição diária calculada; confirme estabilidade, compatibilidade e técnica de preparo para cada intervalo.</li><li>Monitore eletrólitos e balanço conforme o quadro clínico. A equação não determina a solução ou a taxa apropriada para todos os pacientes.</li></ul></section><section><h4>Referências</h4><ul><li><a href="https://doi.org/10.1542/peds.2018-3083" target="_blank" rel="noopener">Feld LG et al. AAP Clinical Practice Guideline: Maintenance Intravenous Fluids in Children. Pediatrics. 2018;142:e20183083.</a></li><li><a href="https://doi.org/10.1056/NEJMra1207442" target="_blank" rel="noopener">Moritz ML, Ayus JC. Maintenance Intravenous Fluids in Acutely Ill Patients. N Engl J Med. 2015.</a></li></ul></section></div></details>
       <p class="form-hint">Ferramenta de apoio. Confira os valores, as unidades, a compatibilidade dos aditivos e o protocolo do seu serviço antes de prescrever.</p>
     </div>`;
   container.querySelectorAll('[data-hv-input]').forEach(input => input.addEventListener('input', () => {
@@ -1187,6 +1244,8 @@ function renderHydrationCalculator() {
     if (input.dataset.hvInput === 'glucose') hydrationDraft.glucoseValues[hydrationDraft.glucoseMode] = input.value;
     calculateHydration(true);
   }));
+  container.querySelector('[data-hv-glucose-toggle]').addEventListener('change', event => { hydrationDraft.glucoseEnabled = event.target.checked; renderHydrationCalculator(); calculateHydration(true); });
+  container.querySelector('[data-hv-distribution-toggle]').addEventListener('change', event => { hydrationDraft.distributionEnabled = event.target.checked; renderHydrationCalculator(); calculateHydration(true); });
   container.querySelector('[data-hv-references]').addEventListener('click', () => {
     hydrationDraft.referencesOpen = !hydrationDraft.referencesOpen;
     renderHydrationCalculator();
@@ -1219,6 +1278,7 @@ function renderHydrationCalculator() {
       else if (hydrationDraft.glucoseMode === 'tig' && hydrationDraft.base === '5') hydrationDraft.base = '5+50';
     }
     else if (button.dataset.hvMode === 'electrolyte') hydrationDraft.electrolyteMode = button.dataset.mode;
+    else if (button.dataset.hvMode === 'aliquot') hydrationDraft.aliquotHours = button.dataset.mode;
     else hydrationDraft.base = button.dataset.mode;
     renderHydrationCalculator();
     calculateHydration(true);
@@ -1308,20 +1368,21 @@ function calculateHypokalemia(silent = false) {
 function calculateHydration(silent = false) {
   const d = hydrationDraft;
   const weight = Number(d.weight), rate = Number(d.rate), glucose = Number(d.glucose);
-  if (!(weight > 0 && rate > 0 && glucose > 0)) {
-    document.getElementById('hvPreparation').innerHTML = '<p class="empty-state">Preencha peso, taxa hídrica e glicose para visualizar o preparo.</p>';
+  if (!(weight > 0 && rate > 0 && (!d.glucoseEnabled || glucose > 0))) {
+    document.getElementById('hvPreparation').innerHTML = '<p class="empty-state">Preencha peso e taxa hídrica e, se incluir glicose, informe o valor prescrito.</p>';
     document.getElementById('hvInfusion').replaceChildren();
     document.getElementById('hvFinal').replaceChildren();
     document.getElementById('hvPrescription').replaceChildren();
+    document.getElementById('hvAliquotResult').replaceChildren();
     document.querySelectorAll('.hv-ion-result').forEach(node => { node.textContent = ''; });
-    if (!silent) showToast('Preencha peso, taxa hídrica e glicose para calcular.');
+    if (!silent) showToast('Preencha peso e taxa hídrica e informe glicose se ela estiver incluída.');
     return;
   }
   const energy = Math.min(weight, 10) * 100 + Math.min(Math.max(weight - 10, 0), 10) * 50 + Math.max(weight - 20, 0) * 20;
   const caloricWeight = Math.round((energy / 100) * 10) / 10;
   const totalMl = caloricWeight * rate;
   const totalL = totalMl / 1000;
-  const glucoseG = d.glucoseMode === 'tig' ? glucose * weight * 1.44 : glucose * caloricWeight;
+  const glucoseG = d.glucoseEnabled ? (d.glucoseMode === 'tig' ? glucose * weight * 1.44 : glucose * caloricWeight) : 0;
   const glucosePercent = glucoseG * 100 / totalMl;
   const stock = { nacl20: 3.4, nacl10: 1.7, nacl09: 0.154, kcl191: 2.56, kcl10: 1.34, ca10: 0.45, mg50: 4.06, mg10: 0.8 };
   const ionMeta = [
@@ -1360,7 +1421,17 @@ function calculateHydration(silent = false) {
   const preparedIons = Object.values(ions).filter(ion => ion.enabled);
   const additiveMl = preparedIons.reduce((sum, ion) => sum + ion.volume, 0);
   let glucoseStockMl, waterMl, glucoseBaseParts;
-  if (d.base === '5+50') {
+  if (!d.glucoseEnabled) {
+    const salineBaseMl = totalMl - additiveMl;
+    if (salineBaseMl < -0.05) {
+      document.getElementById('hvPreparation').innerHTML = '<p class="empty-state">O volume dos aditivos excede o volume total. Revise as doses e apresentações.</p>';
+      document.getElementById('hvInfusion').replaceChildren(); document.getElementById('hvFinal').replaceChildren(); document.getElementById('hvPrescription').replaceChildren(); document.getElementById('hvAliquotResult').replaceChildren();
+      if (!silent) showToast('O volume dos aditivos excede o volume final.');
+      return;
+    }
+    glucoseStockMl = 0; waterMl = 0;
+    glucoseBaseParts = [{ label: 'SF 0,9% (solução isotônica)', volume: Math.max(0, salineBaseMl) }];
+  } else if (d.base === '5+50') {
     const availableBaseMl = totalMl - additiveMl;
     const sg50Ml = (glucoseG - availableBaseMl * 0.05) / 0.45;
     const sg5Ml = availableBaseMl - sg50Ml;
@@ -1394,14 +1465,16 @@ function calculateHydration(silent = false) {
   const potassiumConc = ions.k.enabled ? ions.k.concentration : 0;
   const magnesiumConc = ions.mg.enabled ? ions.mg.concentration : 0;
   const calciumConc = ions.ca.enabled ? ions.ca.concentration : 0;
+  const salineSodiumConc = !d.glucoseEnabled ? 154 * glucoseBaseParts[0].volume / totalMl : 0;
   const glucoseMosm = (glucoseG / totalL) / 180 * 1000;
-  const osmolarity = Math.round((2 * (sodiumConc + potassiumConc) + magnesiumConc + 1.5 * calciumConc + glucoseMosm) / 10) * 10;
+  const osmolarity = Math.round((2 * (sodiumConc + salineSodiumConc + potassiumConc) + magnesiumConc + 1.5 * calciumConc + glucoseMosm) / 10) * 10;
   const nf = value => new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 1 }).format(value);
   document.getElementById('hvCaloricHint').textContent = `Peso calórico ${nf(caloricWeight)} kg · volume ${nf(totalMl)} mL/dia`;
   document.querySelectorAll('[data-hv-ped-option]').forEach(node => { node.querySelector('.hv-ped-volume').firstChild.textContent = `${nf(caloricWeight * Number(node.dataset.hvPedOption))} mL/dia`; });
   const referenceCaloricWeight = document.getElementById('hvReferenceCaloricWeight');
   if (referenceCaloricWeight) referenceCaloricWeight.textContent = `${nf(caloricWeight)} kg`;
-  document.getElementById('hvGlucoseHint').textContent = d.glucoseMode === 'tig' ? `Sobre o peso real · ${nf(glucoseG)} g/dia` : `Sobre o peso calórico · ${nf(glucoseG)} g/dia`;
+  const glucoseHint = document.getElementById('hvGlucoseHint');
+  if (glucoseHint) glucoseHint.textContent = d.glucoseMode === 'tig' ? `Sobre o peso real · ${nf(glucoseG)} g/dia` : `Sobre o peso calórico · ${nf(glucoseG)} g/dia`;
   for (const ion of Object.values(ions)) {
     const card = document.querySelector(`[data-hv-ion-result="${ion.key}"]`);
     if (card) card.textContent = `${nf(ion.amount)} mEq/dia · ${nf(ion.volume)} mL${ion.key === 'ca' ? ' · cálculo separado da bolsa' : ''}`;
@@ -1411,14 +1484,20 @@ function calculateHydration(silent = false) {
   baseParts.push(`<div class="hv-total"><span>Total</span><strong>${nf(totalMl)} mL</strong></div>`);
   document.getElementById('hvPreparation').innerHTML = baseParts.join('');
   document.getElementById('hvInfusion').innerHTML = `<strong>${nf(totalMl / 24)} <small>mL/h</small></strong><span>${Math.round(totalMl / 24 * 20 / 60)} gts/min · ${nf(totalMl / 24)} micro/min</span>`;
-  document.getElementById('hvFinal').innerHTML = `<div><span>OSMOLARIDADE</span><strong>${nf(osmolarity)} mOsm/L</strong></div><div><span>CONC. DE GLICOSE</span><strong>${nf(glucosePercent)}%</strong></div><div><span>CONC. DE SÓDIO</span><strong>${Math.round(sodiumConc)} mEq/L</strong></div><div><span>CONC. DE POTÁSSIO</span><strong>${Math.round(potassiumConc)} mEq/L</strong></div><div><span>CONC. DE MAGNÉSIO</span><strong>${Math.round(magnesiumConc)} mEq/L</strong></div>${ions.ca.enabled ? `<div><span>CONC. DE CÁLCIO</span><strong>${Math.round(calciumConc)} mEq/L</strong></div>` : ''}`;
+  document.getElementById('hvFinal').innerHTML = `<div><span>OSMOLARIDADE</span><strong>${nf(osmolarity)} mOsm/L</strong></div><div><span>CONC. DE GLICOSE</span><strong>${d.glucoseEnabled ? `${nf(glucosePercent)}%` : 'Não incluída'}</strong></div><div><span>CONC. DE SÓDIO ADICIONADO</span><strong>${Math.round(sodiumConc)} mEq/L</strong></div><div><span>CONC. DE POTÁSSIO</span><strong>${Math.round(potassiumConc)} mEq/L</strong></div><div><span>CONC. DE MAGNÉSIO</span><strong>${Math.round(magnesiumConc)} mEq/L</strong></div>${ions.ca.enabled ? `<div><span>CONC. DE CÁLCIO</span><strong>${Math.round(calciumConc)} mEq/L</strong></div>` : ''}`;
   const doseSummary = ionMeta.filter(ion => ions[ion.key].enabled).map(ion => {
     if (d.electrolyteMode === 'concentration') return `${ion.symbol}:${nf(d[ion.key].concentration)} mEq/L`;
     return `${ion.symbol}:${nf(d[ion.key].dose)}${ion.key === 'ca' ? ` ${d.ca.unit === 'meq' ? 'mEq/kg/dia' : d.ca.unit === 'mgCa' ? 'mg Ca/kg/dia' : 'mg gluconato/kg/dia'}` : ' mEq/kg/dia'}`;
   }).join(' ');
-  const glucoseSummary = d.glucoseMode === 'tig' ? `TIG ${nf(glucose)} mg/kg/min` : `Glicose ${nf(glucose)} g/Kcal`;
+  const glucoseSummary = d.glucoseEnabled ? (d.glucoseMode === 'tig' ? `TIG ${nf(glucose)} mg/kg/min` : `Glicose ${nf(glucose)} g/Kcal`) : 'sem glicose · SF 0,9% isotônico';
   const glucosePreparationSummary = glucoseBaseParts.map(part => `${part.label}: ${nf(part.volume)} mL`).join(' + ');
-  document.getElementById('hvPrescription').innerHTML = `<div class="hv-copy-block"><small>RESUMO</small><b>HV TH ${nf(rate)} mL/kg/dia · ${glucoseSummary} · ${doseSummary} · IV a ${nf(totalMl / 24)} mL/h</b></div><div class="hv-copy-block"><small>MODO DE PREPARO</small><b>${glucosePreparationSummary} + ${preparedIons.map(ion => `${ion.label} ${nf(ion.volume)} mL`).join(' + ')} · Volume total: ${nf(totalMl)} mL</b></div>`;
+  const aliquotHours = Number(d.aliquotHours), aliquots = d.distributionEnabled ? 24 / aliquotHours : 0, aliquotMl = d.distributionEnabled ? totalMl / aliquots : 0, aliquotRate = d.distributionEnabled ? aliquotMl / aliquotHours : 0;
+  const aliquotParts = [...glucoseBaseParts.map(part => `${part.label}: ${nf(part.volume / (aliquots || 1))} mL`), ...preparedIons.map(ion => `${ion.label}: ${nf(ion.volume / (aliquots || 1))} mL`)].join(' + ');
+  document.getElementById('hvAliquotResult').innerHTML = d.distributionEnabled ? `<div class="hv-aliquot-card"><b>${aliquots} alíquotas de ${nf(aliquotHours)} h</b><span>${nf(aliquotMl)} mL por alíquota · ${nf(aliquotRate)} mL/h · ${Math.round(aliquotRate * 20 / 60)} gts/min · ${nf(aliquotRate)} micro/min</span><small>${aliquotParts} · completar cada alíquota conforme técnica e protocolo local.</small></div>` : '';
+  const prepAliquot = d.distributionEnabled ? `<div class="hv-aliquot-card"><b>Preparo de cada alíquota (${nf(aliquotHours)} h)</b><span>Volume final ${nf(aliquotMl)} mL · correr a ${nf(aliquotRate)} mL/h</span><small>${aliquotParts}</small></div>` : '';
+  document.getElementById('hvPreparation').innerHTML = `${baseParts.join('')}${prepAliquot}`;
+  const aliquotCopy = d.distributionEnabled ? `<div class="hv-copy-block"><small>PREPARO POR ALÍQUOTA · ${aliquots} × ${nf(aliquotHours)} h</small><b>${aliquotParts} · Volume final ${nf(aliquotMl)} mL · ${nf(aliquotRate)} mL/h (${Math.round(aliquotRate * 20 / 60)} gts/min)</b></div>` : '';
+  document.getElementById('hvPrescription').innerHTML = `<div class="hv-copy-block"><small>RESUMO</small><b>HV TH ${nf(rate)} mL/kg/dia · ${glucoseSummary} · ${doseSummary || 'sem eletrólitos adicionados'} · IV a ${nf(totalMl / 24)} mL/h${d.distributionEnabled ? ` · ${aliquots} alíquotas de ${nf(aliquotHours)} h` : ''}</b></div>${aliquotCopy}`;
 }
 function renderClinicalCalculatorResult(result, guide) {
   const memory = Array.isArray(result.memory) ? result.memory : [result.memory];
@@ -1545,37 +1624,6 @@ document.getElementById('calculatorSearch').addEventListener('input', event => {
   renderCalculatorCatalog();
 });
 document.getElementById('calculateDynamicCalculator').addEventListener('click', calculateActiveCalculator);
-document.getElementById('calculateDose').addEventListener('click', () => {
-  const weight = Number(document.getElementById('doseWeight').value);
-  const dosePerKg = Number(document.getElementById('dosePerKg').value);
-  const concentration = Number(document.getElementById('doseConcentration').value);
-  const maxRaw = document.getElementById('doseMaximum').value;
-  const maximum = maxRaw === '' ? null : Number(maxRaw);
-  if (!positive(weight, dosePerKg, concentration) || (maximum !== null && (!Number.isFinite(maximum) || maximum <= 0))) { showCalculation('doseResult', '<b>Preencha valores positivos e confira as unidades.</b>'); return; }
-  const dose = weight * dosePerKg;
-  const volume = dose / concentration;
-  const exceeded = maximum !== null && dose > maximum;
-  showCalculation('doseResult', `<small>Resultado matemático a partir dos valores informados</small><strong>${number.format(dose)} mg por dose</strong><small>Volume calculado: <b>${number.format(volume)} mL</b> · ${number.format(weight)} kg × ${number.format(dosePerKg)} mg/kg ÷ ${number.format(concentration)} mg/mL</small>${exceeded ? '<small class="result-warning"><b>Atenção:</b> o resultado ultrapassa o limite máximo que você informou. Verifique a prescrição e a fonte profissional.</small>' : '<small>Confirme dose, limite e apresentação na bula profissional ou protocolo vigente.</small>'}`);
-});
-document.getElementById('doseMedication').addEventListener('change', event => {
-  const item = state.medications.find(medication => medication.id === event.target.value);
-  document.getElementById('dosePerKg').value = item?.dosePerKg || '';
-  document.getElementById('doseConcentration').value = item?.concentration || '';
-  document.getElementById('doseMaximum').value = item?.maxDose || '';
-});
-document.getElementById('calculateVolume').addEventListener('click', () => {
-  const mg = Number(document.getElementById('amountMg').value);
-  const concentration = Number(document.getElementById('amountConcentration').value);
-  if (!positive(mg, concentration)) { showCalculation('volumeResult', '<b>Preencha valores positivos e confira as unidades.</b>'); return; }
-  showCalculation('volumeResult', `<small>Resultado matemático a partir dos valores informados</small><strong>${number.format(mg / concentration)} mL</strong><small>${number.format(mg)} mg ÷ ${number.format(concentration)} mg/mL. Confira a concentração da apresentação.</small>`);
-});
-document.getElementById('calculateInfusion').addEventListener('click', () => {
-  const volume = Number(document.getElementById('infusionVolume').value);
-  const duration = Number(document.getElementById('infusionHours').value);
-  if (!positive(volume, duration)) { showCalculation('infusionResult', '<b>Preencha valores positivos e confira as unidades.</b>'); return; }
-  showCalculation('infusionResult', `<small>Resultado matemático a partir dos valores informados</small><strong>${number.format(volume / duration)} mL/h</strong><small>${number.format(volume)} mL ÷ ${number.format(duration)} horas. Confirme parâmetros e equipamento conforme protocolo local.</small>`);
-});
-
 const authClient = window.MEU_PLANTAO_SUPABASE_CLIENT;
 const authGate = document.getElementById('authGate');
 const appShell = document.getElementById('appShell');
