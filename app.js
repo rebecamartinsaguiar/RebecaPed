@@ -1184,7 +1184,7 @@ function renderSroPlan(d, age, weight, ageLabel, nf) {
   const drops = (volume, hours, factor) => Math.round(volume / hours * factor / 60);
   const maintenanceKclMl = maintenanceMl * 0.02;
   const maintenanceFinalMl = maintenanceMl + maintenanceKclMl;
-  const aliquots = maintenanceFinalMl > 500 ? Math.ceil(maintenanceFinalMl / 500) : 1;
+  const aliquots = Math.max(1, Math.ceil(Math.max(maintenanceFinalMl, replacementMl) / 500));
   const aliquotHours = 24 / aliquots;
   const aliquotPeriod = aliquotHours % 1 ? `${Math.floor(aliquotHours)} h ${Math.round((aliquotHours % 1) * 60)} min` : `${aliquotHours} h`;
   const maintenancePerAliquot = maintenanceMl / aliquots;
